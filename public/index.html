@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>간단 마작</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="top">
+        <h1>간단 마작</h1>
+        <p class="sub">동·남·서·북 자리 · 스프라이트 패 · 4인 론/쯔모</p>
+      </header>
+
+      <section id="panel-auth" class="card">
+        <label>닉네임</label>
+        <div class="row">
+          <input id="nick" type="text" maxlength="24" placeholder="닉네임" autocomplete="username" />
+          <button type="button" id="btn-save-nick">저장</button>
+        </div>
+        <p id="me-line" class="muted"></p>
+      </section>
+
+      <section id="panel-lobby" class="card">
+        <h2>방</h2>
+        <div class="row wrap">
+          <button type="button" id="btn-create">방 만들기</button>
+          <input id="room-code" type="text" maxlength="8" placeholder="방 코드" />
+          <button type="button" id="btn-join">입장</button>
+          <button type="button" id="btn-leave" class="ghost">나가기</button>
+        </div>
+        <p id="room-line" class="muted"></p>
+        <div class="room-code-row hidden" id="room-code-row">
+          <button type="button" id="btn-copy-room" class="ghost">코드 복사</button>
+          <span id="room-code-display" class="muted"></span>
+        </div>
+        <div id="roster"></div>
+        <div class="row wrap">
+          <button type="button" id="btn-start" disabled>게임 시작 (4명·방장)</button>
+          <button type="button" id="btn-restart" class="ghost" disabled>한 판 더</button>
+        </div>
+      </section>
+
+      <section id="panel-chat" class="card">
+        <h2>채팅</h2>
+        <div id="chat-log" class="chat-log"></div>
+        <div class="row">
+          <input id="chat-input" type="text" maxlength="500" placeholder="메시지" />
+          <button type="button" id="btn-chat">보내기</button>
+        </div>
+      </section>
+
+      <section id="panel-game" class="card table-card hidden">
+        <div class="table-toolbar">
+          <p id="game-status" class="status-main"></p>
+          <div id="game-extra" class="status-extra"></div>
+        </div>
+
+        <div class="mahjong-table">
+          <div class="compass-ring" aria-hidden="true">
+            <span class="c c-n">북</span>
+            <span class="c c-e">동</span>
+            <span class="c c-s">남</span>
+            <span class="c c-w">서</span>
+          </div>
+          <div id="zone-top" class="pz pz-top"></div>
+          <div id="zone-left" class="pz pz-left"></div>
+          <div class="table-mid">
+            <div class="table-mid-inner">
+              <div class="wall-count" id="wall-count-disp">—</div>
+              <div class="wall-sub">남은 산패 · 테이블 위가 북쪽</div>
+            </div>
+          </div>
+          <div id="zone-right" class="pz pz-right"></div>
+          <div id="zone-bottom" class="pz pz-bottom"></div>
+        </div>
+
+        <p class="hand-label">내 패 (화면 아래 = 남쪽)</p>
+        <div id="hand" class="hand"></div>
+        <div id="naki-bar" class="naki-bar hidden">
+          <span class="naki-hint">후로 (하가→차례)</span>
+          <select id="chi-pair-select" class="chi-pair-select hidden" aria-label="치 조합"></select>
+          <button type="button" id="btn-chi" class="ghost" disabled>치</button>
+          <button type="button" id="btn-pon" class="ghost" disabled>펑</button>
+          <button type="button" id="btn-pass-naki" class="ghost" disabled>후로 패스</button>
+        </div>
+        <div class="row wrap actions">
+          <button type="button" id="btn-tsumo" disabled>쯔모</button>
+          <button type="button" id="btn-ron" disabled>론</button>
+          <button type="button" id="btn-pass-ron" disabled>론 패스</button>
+        </div>
+      </section>
+
+      <p id="toast" class="toast hidden" role="status"></p>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

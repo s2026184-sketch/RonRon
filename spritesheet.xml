@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TextureAtlas imagePath="spritesheet.png" width="488" height="1566">
+  <SubTexture name="frame_000" x="0" y="0" width="122" height="174"/>
+  <SubTexture name="frame_001" x="122" y="0" width="122" height="174"/>
+  <SubTexture name="frame_002" x="244" y="0" width="122" height="174"/>
+  <SubTexture name="frame_003" x="366" y="0" width="122" height="174"/>
+  <SubTexture name="frame_004" x="0" y="174" width="122" height="174"/>
+  <SubTexture name="frame_005" x="122" y="174" width="122" height="174"/>
+  <SubTexture name="frame_006" x="244" y="174" width="122" height="174"/>
+  <SubTexture name="frame_007" x="366" y="174" width="122" height="174"/>
+  <SubTexture name="frame_008" x="0" y="348" width="122" height="174"/>
+  <SubTexture name="frame_009" x="122" y="348" width="122" height="174"/>
+  <SubTexture name="frame_010" x="244" y="348" width="122" height="174"/>
+  <SubTexture name="frame_011" x="366" y="348" width="122" height="174"/>
+  <SubTexture name="frame_012" x="0" y="522" width="122" height="174"/>
+  <SubTexture name="frame_013" x="122" y="522" width="122" height="174"/>
+  <SubTexture name="frame_014" x="244" y="522" width="122" height="174"/>
+  <SubTexture name="frame_015" x="366" y="522" width="122" height="174"/>
+  <SubTexture name="frame_016" x="0" y="696" width="122" height="174"/>
+  <SubTexture name="frame_017" x="122" y="696" width="122" height="174"/>
+  <SubTexture name="frame_018" x="244" y="696" width="122" height="174"/>
+  <SubTexture name="frame_019" x="366" y="696" width="122" height="174"/>
+  <SubTexture name="frame_020" x="0" y="870" width="122" height="174"/>
+  <SubTexture name="frame_021" x="122" y="870" width="122" height="174"/>
+  <SubTexture name="frame_022" x="244" y="870" width="122" height="174"/>
+  <SubTexture name="frame_023" x="366" y="870" width="122" height="174"/>
+  <SubTexture name="frame_024" x="0" y="1044" width="122" height="174"/>
+  <SubTexture name="frame_025" x="122" y="1044" width="122" height="174"/>
+  <SubTexture name="frame_026" x="244" y="1044" width="122" height="174"/>
+  <SubTexture name="frame_027" x="366" y="1044" width="122" height="174"/>
+  <SubTexture name="frame_028" x="0" y="1218" width="122" height="174"/>
+  <SubTexture name="frame_029" x="122" y="1218" width="122" height="174"/>
+  <SubTexture name="frame_030" x="244" y="1218" width="122" height="174"/>
+  <SubTexture name="frame_031" x="366" y="1218" width="122" height="174"/>
+  <SubTexture name="frame_032" x="0" y="1392" width="122" height="174"/>
+  <SubTexture name="frame_033" x="122" y="1392" width="122" height="174"/>
+</TextureAtlas>
