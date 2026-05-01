@@ -1,0 +1,11 @@
+{
+  "users": [
+    {
+      "username": "scratchdth",
+      "nickname": "a",
+      "salt": "75107c59f73802c112a0a41642f37f61",
+      "passwordHash": "e0f9c63907ff7278e65983f6f65d677021c4bf62e27b7742023d113a8d1c6c28db011dfa65f34e42127bd769de0254ccc956f259d5200e65dc98ae067fa58cd0",
+      "token": "ab7411753ff0bd669f0fecc517aaad1321e80d1da7671082fc91f4020e50d97f"
+    }
+  ]
+}

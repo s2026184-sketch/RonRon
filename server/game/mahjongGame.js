@@ -42,14 +42,29 @@ export function createMahjongState() {
     winner: /** @type {number | null} */ (null),
     winType: /** @type {'tsumo' | 'ron' | null} */ (null),
     error: /** @type {string | null} */ (null),
+    /** 점수 시스템 */
+    scores: /** @type {number[]} */ ([25000, 25000, 25000, 25000]), // 초기 점수
+    prevalentWind: 0, // 장풍 (0:동, 1:남, 2:서, 3:북)
+    gameMode: 'normal', // 'normal' or 'tonpufu' (동풍전)
+    round: 1, // 동풍전 판 번호 (1-4)
+    honba: 0, // 본장
+    riichi: /** @type {boolean[]} */ ([false, false, false, false]), // 리치 상태
+    yaku: /** @type {Array<{ name: string, han: number }[]>} */ ([], [], [], []), // 역패 목록
+    fu: /** @type {number[]} */ ([0, 0, 0, 0]), // 부수
+    han: /** @type {number[]} */ ([0, 0, 0, 0]), // 합
+    points: /** @type {number[]} */ ([0, 0, 0, 0]), // 최종 점수
+    doraIndicators: /** @type {string[]} */ ([]), // 도라 표시패
   };
 }
 
-/** @param {ReturnType<typeof createMahjongState>} st @param {number} dealerSeat */
-export function startGame(st, dealerSeat = 0) {
+/** @param {ReturnType<typeof createMahjongState>} st @param {number} dealerSeat @param {string} gameMode */
+export function startGame(st, dealerSeat = 0, gameMode = 'normal', round = 1, honba = 0) {
   st.error = null;
   st.winner = null;
   st.winType = null;
+  st.gameMode = gameMode;
+  st.round = round;
+  st.honba = honba;
   st.lastDiscard = null;
   st.waitingRon = false;
   st.ronPasses = [];
@@ -83,9 +98,20 @@ export function startGame(st, dealerSeat = 0) {
   st.deadWall = [];
   st.phase = 'playing';
 
+  // 도라 표시패 초기화
+  st.doraIndicators = [];
+  addDoraIndicator(st);
+
   const draw = st.wall.shift();
   if (draw) st.hands[st.dealer].push(draw);
   st.hands[st.dealer] = sortTiles(st.hands[st.dealer]);
+
+  // 점수 및 역패 초기화
+  st.riichi = [false, false, false, false];
+  st.yaku = [[], [], [], []];
+  st.fu = [0, 0, 0, 0];
+  st.han = [0, 0, 0, 0];
+  st.points = [0, 0, 0, 0];
 }
 
 function handSize(st, seat) {
@@ -338,6 +364,40 @@ export function declareChi(st, seat, tileA, tileB) {
  * @param {ReturnType<typeof createMahjongState>} st
  * @param {number} seat
  */
+export function declareRiichi(st, seat) {
+  st.error = null;
+  if (st.phase !== 'playing') {
+    st.error = '게임 진행 중이 아닙니다.';
+    return false;
+  }
+  if (seat !== st.current) {
+    st.error = '리치는 자기 차례에만 가능합니다.';
+    return false;
+  }
+  if (st.riichi[seat]) {
+    st.error = '이미 리치했습니다.';
+    return false;
+  }
+  if (st.melds[seat].length > 0) {
+    st.error = '멘젠 상태에서만 리치할 수 있습니다.';
+    return false;
+  }
+  // 리치 조건: 1000점 이상, 텐파이 상태 (간단하게 구현)
+  if (st.scores[seat] < 1000) {
+    st.error = '리치하려면 1000점 이상이 필요합니다.';
+    return false;
+  }
+  
+  st.riichi[seat] = true;
+  // 1000점 차감
+  st.scores[seat] -= 1000;
+  return true;
+}
+
+/**
+ * @param {ReturnType<typeof createMahjongState>} st
+ * @param {number} seat
+ */
 export function declareTsumo(st, seat) {
   st.error = null;
   if (seat < 0 || seat >= SEATS) {
@@ -363,6 +423,19 @@ export function declareTsumo(st, seat) {
     st.error = '화료 패가 아닙니다.';
     return false;
   }
+  
+  // 점수 계산
+  st.yaku[seat] = calculateYaku(st, seat, true);
+  st.fu[seat] = calculateFu(st, seat, st.yaku[seat], true);
+  st.han[seat] = st.yaku[seat].reduce((sum, y) => sum + y.han, 0);
+  if (st.han[seat] <= 0) {
+    st.error = '역패가 없어 쯔모할 수 없습니다.';
+    return false;
+  }
+  const score = calculatePointValues(st.fu[seat], st.han[seat], seat === st.dealer, true);
+  st.points[seat] = score.total;
+  applyScoreSettlement(st, seat, true, score);
+  
   st.waitingRon = false;
   st.ronPasses = [];
   st.nextDrawer = null;
@@ -410,6 +483,19 @@ export function declareRon(st, seat) {
     st.error = '론 불가 패입니다.';
     return false;
   }
+  
+  // 점수 계산
+  st.yaku[seat] = calculateYaku(st, seat, false);
+  st.fu[seat] = calculateFu(st, seat, st.yaku[seat], false);
+  st.han[seat] = st.yaku[seat].reduce((sum, y) => sum + y.han, 0);
+  if (st.han[seat] <= 0) {
+    st.error = '역패가 없어 론할 수 없습니다.';
+    return false;
+  }
+  const score = calculatePointValues(st.fu[seat], st.han[seat], seat === st.dealer, false);
+  st.points[seat] = score.total;
+  applyScoreSettlement(st, seat, false, score);
+  
   st.waitingRon = false;
   st.ronPasses = [];
   st.nextDrawer = null;
@@ -445,6 +531,46 @@ export function publicSnapshot(st, viewerSeat) {
     nakiChiPairs = chiTilePairs(st.hands[viewerSeat], st.nakiTile);
   }
 
+  let canRon = false;
+  if (
+    st.waitingRon &&
+    st.lastDiscard &&
+    st.lastDiscard.seat !== viewerSeat &&
+    viewerSeat >= 0 &&
+    viewerSeat < SEATS
+  ) {
+    const m = st.melds[viewerSeat].length;
+    if (handSize(st, viewerSeat) === 13 - 3 * m) {
+      const trial = sortTiles([...st.hands[viewerSeat], st.lastDiscard.tile]);
+      canRon = isWinningHandWithOpen(trial, m);
+    }
+  }
+
+  let canTsumo = false;
+  if (
+    st.phase === 'playing' &&
+    !st.waitingRon &&
+    !st.waitingNaki &&
+    st.current === viewerSeat &&
+    viewerSeat >= 0 &&
+    viewerSeat < SEATS
+  ) {
+    const m = st.melds[viewerSeat].length;
+    if (handSize(st, viewerSeat) === 14 - 3 * m) {
+      const sorted = sortTiles(st.hands[viewerSeat]);
+      canTsumo = isWinningHandWithOpen(sorted, m);
+    }
+  }
+
+  let canChi = false;
+  let canPon = false;
+  let canPassNaki = false;
+  if (st.waitingNaki && st.nakiCurrentSeat === viewerSeat) {
+    canChi = st.nakiCanChi;
+    canPon = st.nakiCanPon;
+    canPassNaki = true;
+  }
+
   return {
     phase: st.phase,
     current: st.current,
@@ -462,11 +588,30 @@ export function publicSnapshot(st, viewerSeat) {
     nakiCanChi: st.nakiCanChi && st.nakiCurrentSeat === viewerSeat,
     nakiCanPon: st.nakiCanPon && st.nakiCurrentSeat === viewerSeat,
     nakiChiPairs,
+    canRon,
+    canTsumo,
+    canChi,
+    canPon,
+    canPassNaki,
     awaitingDiscardAfterMeld: st.awaitingDiscardAfterMeld,
     winner: st.winner,
     winType: st.winType,
     error: st.error,
     reveal,
+    gameMode: st.gameMode,
+    round: st.round,
+    honba: st.honba,
+    // 리치/장풍 정보
+    riichi: [...st.riichi],
+    prevalentWind: st.prevalentWind,
+    // 도라 정보
+    doraIndicators: [...st.doraIndicators],
+    // 점수 정보
+    scores: [...st.scores],
+    yaku: st.yaku.map(y => [...y]),
+    fu: [...st.fu],
+    han: [...st.han],
+    points: [...st.points],
   };
 }
 
@@ -475,6 +620,216 @@ export function handSnapshotForSeat(st, seat) {
     tiles: sortTiles(st.hands[seat]),
     labels: sortTiles(st.hands[seat]).map(tileLabelKo),
   };
+}
+
+// 역패 계산 함수들
+function isTanyao(tiles) {
+  // 탕야오추: 2-8만/통/삭만 사용
+  return tiles.every(tile => {
+    if (tile[0] === 'z') return false; // 자패 제외
+    const num = parseInt(tile.slice(1));
+    return num >= 2 && num <= 8;
+  });
+}
+
+function isPinfu(hand, melds, seatWind, prevalentWind) {
+  // 핑후: 멘젠쯔모, 노역만, 단기대기
+  if (melds.length > 0) return false; // 멘젠이어야 함
+  
+  // 단기대기 확인 (간단한 버전)
+  const sorted = sortTiles(hand);
+  // 실제로는 더 복잡한 로직이 필요하지만 간단하게 구현
+  return true; // 임시로 true 반환
+}
+
+function hasSeatWind(tiles, seat) {
+  // 자풍: 자신의 바람패 머리
+  const windTile = ['z1', 'z2', 'z3', 'z4'][seat];
+  return tiles.filter(t => t === windTile).length >= 2;
+}
+
+function hasPrevalentWind(tiles, prevalentWind) {
+  // 장풍: 장풍 머리
+  const windTile = ['z1', 'z2', 'z3', 'z4'][prevalentWind];
+  return tiles.filter(t => t === windTile).length >= 2;
+}
+
+function hasDragons(tiles) {
+  // 삼원패: 백/발/중
+  return tiles.some(tile => ['z5', 'z6', 'z7'].includes(tile));
+}
+
+function hasRiichi(riichi, seat) {
+  // 리치
+  return riichi[seat];
+}
+
+function calculateYaku(st, seat, isTsumo) {
+  const hand = st.hands[seat];
+  const melds = st.melds[seat];
+  const allTiles = [...hand, ...melds.flatMap(m => m.tiles)];
+  const yaku = [];
+  
+  // 탕야오추
+  if (isTanyao(allTiles)) {
+    yaku.push({ name: '탕야오추', han: 1 });
+  }
+  
+  // 핑후 (쯔모만)
+  if (isTsumo && isPinfu(hand, melds, seat, st.prevalentWind)) {
+    yaku.push({ name: '핑후', han: 1 });
+  }
+  
+  // 자풍
+  if (hasSeatWind(allTiles, seat)) {
+    yaku.push({ name: '자풍', han: 1 });
+  }
+  
+  // 장풍
+  if (hasPrevalentWind(allTiles, st.prevalentWind)) {
+    yaku.push({ name: '장풍', han: 1 });
+  }
+  
+  // 삼원패
+  if (hasDragons(allTiles)) {
+    yaku.push({ name: '삼원패', han: 1 });
+  }
+  
+  // 리치
+  if (hasRiichi(st.riichi, seat)) {
+    yaku.push({ name: '리치', han: 1 });
+  }
+  
+  return yaku;
+}
+
+function calculateFu(st, seat, yaku, isTsumo) {
+  // 기본 부수 계산 (간단 버전)
+  let fu = 20; // 기본 20부
+  
+  // 오야쯔모 보너스
+  if (isTsumo && seat === st.dealer) {
+    fu += 2;
+  }
+  
+  return fu;
+}
+
+function calculatePointValues(fu, han, isDealer, isTsumo) {
+  const basePoints = fu * Math.pow(2, han + 2);
+  if (isTsumo) {
+    if (isDealer) {
+      return { total: basePoints * 6, dealerPayment: 0, otherPayment: basePoints * 2 };
+    }
+    return { total: basePoints * 4, dealerPayment: basePoints * 2, otherPayment: basePoints };
+  }
+  return { total: basePoints * 4, loserPayment: basePoints * 4 };
+}
+
+function applyScoreSettlement(st, seat, isTsumo, score) {
+  if (isTsumo) {
+    if (seat === st.dealer) {
+      const eachLoss = score.otherPayment;
+      for (let s = 0; s < SEATS; s++) {
+        if (s === seat) continue;
+        st.scores[s] -= eachLoss;
+      }
+      st.scores[seat] += eachLoss * 3;
+    } else {
+      for (let s = 0; s < SEATS; s++) {
+        if (s === seat) continue;
+        if (s === st.dealer) {
+          st.scores[s] -= score.dealerPayment;
+        } else {
+          st.scores[s] -= score.otherPayment;
+        }
+      }
+      st.scores[seat] += score.total;
+    }
+  } else {
+    const loser = st.lastDiscard?.seat;
+    if (typeof loser === 'number' && loser >= 0 && loser < SEATS) {
+      st.scores[loser] -= score.loserPayment;
+    }
+    st.scores[seat] += score.total;
+  }
+}
+
+function allTileTypes() {
+  const tiles = [];
+  for (const suit of ['m', 'p', 's']) {
+    for (let i = 1; i <= 9; i++) tiles.push(`${suit}${i}`);
+  }
+  for (let i = 1; i <= 7; i++) tiles.push(`z${i}`);
+  return tiles;
+}
+
+export function isTenpai(st, seat) {
+  const hand = st.hands[seat];
+  const meldCount = st.melds[seat].length;
+  if (handSize(st, seat) !== 13 - 3 * meldCount) return false;
+  const candidates = allTileTypes();
+  return candidates.some((tile) => {
+    const trial = sortTiles([...hand, tile]);
+    return isWinningHandWithOpen(trial, meldCount);
+  });
+}
+
+function calculatePoints(fu, han, isDealer, isTsumo) {
+  return calculatePointValues(fu, han, isDealer, isTsumo).total;
+}
+
+/**
+ * 도라 표시패 추가
+ * @param {ReturnType<typeof createMahjongState>} st
+ */
+export function addDoraIndicator(st) {
+  if (st.wall.length === 0) return;
+  const indicator = st.wall.shift();
+  st.doraIndicators.push(indicator);
+}
+
+/**
+ * 깡 도라 표시패 추가 (린샨 개방 시)
+ * @param {ReturnType<typeof createMahjongState>} st
+ */
+export function addKanDoraIndicator(st) {
+  if (st.deadWall.length === 0) return;
+  const indicator = st.deadWall.shift();
+  st.doraIndicators.push(indicator);
+}
+
+/**
+ * 도라 수 계산
+ * @param {string[]} tiles - 검사할 타일들
+ * @param {string[]} doraIndicators - 도라 표시패들
+ * @returns {number} 도라 수
+ */
+export function countDora(tiles, doraIndicators) {
+  let count = 0;
+  for (const tile of tiles) {
+    for (const indicator of doraIndicators) {
+      if (nextTile(indicator) === tile) {
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
+/** @param {string} tile - Get the next tile in sequence (for dora) */
+function nextTile(tile) {
+  const suit = tile[0];
+  const n = parseInt(tile.slice(1), 10);
+  if (suit === 'z') {
+    if (n === 7) return 'z1'; // 중 -> 동
+    return `z${n + 1}`;
+  }
+  if (n === 9) {
+    const nextSuit = suit === 'm' ? 'p' : suit === 'p' ? 's' : 'z';
+    return `${nextSuit}1`;
+  }
+  return `${suit}${n + 1}`;
 }
 
 export { SEATS, sortTiles, tileLabelKo };

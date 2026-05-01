@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { Server } from 'socket.io';
 import { createRoomManager } from './roomManager.js';
+import { createAccountStore } from './accountStore.js';
 import {
   discardTile,
   declareTsumo,
@@ -13,6 +14,8 @@ import {
   passNaki,
   declarePon,
   declareChi,
+  declareRiichi,
+  isTenpai,
 } from './game/mahjongGame.js';
 
 const app = express();
@@ -22,8 +25,19 @@ const io = new Server(server, {
 });
 
 const rm = createRoomManager();
-const PORT = Number(process.env.PORT) || 3000;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const accounts = createAccountStore(path.join(__dirname, 'accounts.json'));
+const PORT = Number(process.env.PORT) || 3000;
+
+function getTokenFromReq(req) {
+  const header = String(req.headers.authorization || '');
+  if (header.startsWith('Bearer ')) return header.slice(7).trim();
+  return null;
+}
+
+function apiError(res, error, code = 400) {
+  return res.status(code).json({ ok: false, error });
+}
 
 /** @param {import('socket.io').Socket} socket */
 function leaveIoRooms(socket) {
@@ -42,17 +56,97 @@ function finalizeMatchWin(io, rm, room, rid, winnerSeat, winType) {
     winnerSeat,
     winnerNickname: wn,
   });
-  const sids = rm.dissolveRoom(rid);
-  for (const sid of sids) {
-    const sock = io.sockets.sockets.get(sid);
-    if (sock) {
-      sock.leave(`room:${rid}`);
-      sock.data.roomId = null;
+  
+  if (room.game.gameMode === 'tonpufu') {
+    const keepDealer = winnerSeat === room.game.dealer;
+    const result = rm.autoStartNextRound(rid, keepDealer);
+    if (result.ok) {
+      rm.broadcastState(room, io, rid);
+      io.to(`room:${rid}`).emit('game:next-round', {
+        round: room.game.round,
+        message: `동${room.game.round}국 시작! ${keepDealer ? '오야 렌짱' : '다음 오야'}`,
+      });
+    } else {
+      const sids = rm.dissolveRoom(rid);
+      for (const sid of sids) {
+        const sock = io.sockets.sockets.get(sid);
+        if (sock) {
+          sock.leave(`room:${rid}`);
+          sock.data.roomId = null;
+        }
+      }
+      io.to(`room:${rid}`).emit('game:tonpufu-finished', {
+        message: '동풍전이 종료되었습니다!',
+      });
+    }
+  } else {
+    const sids = rm.dissolveRoom(rid);
+    for (const sid of sids) {
+      const sock = io.sockets.sockets.get(sid);
+      if (sock) {
+        sock.leave(`room:${rid}`);
+        sock.data.roomId = null;
+      }
     }
   }
 }
 
+function finalizeDrawEnd(io, rm, room, rid) {
+  const dealer = room.game.dealer;
+  const tenpai = isTenpai(room.game, dealer);
+  const keepDealer = tenpai;
+  const result = rm.autoStartNextRound(rid, keepDealer);
+  if (result.ok) {
+    rm.broadcastState(room, io, rid);
+    io.to(`room:${rid}`).emit('game:draw', {
+      tenpai,
+      keepDealer,
+      round: room.game.round,
+      message: tenpai
+        ? `유국! 오야 텐파이로 렌짱, 동${room.game.round}국 시작!`
+        : `유국! 오야 노텐, 다음 오야로 넘어갑니다. 동${room.game.round}국 시작!`,
+    });
+  } else {
+    const sids = rm.dissolveRoom(rid);
+    for (const sid of sids) {
+      const sock = io.sockets.sockets.get(sid);
+      if (sock) {
+        sock.leave(`room:${rid}`);
+        sock.data.roomId = null;
+      }
+    }
+    io.to(`room:${rid}`).emit('game:tonpufu-finished', {
+      message: '동풍전이 종료되었습니다!',
+    });
+  }
+}
+
+app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
+
+app.post('/api/register', (req, res) => {
+  const username = String(req.body?.username || '');
+  const password = String(req.body?.password || '');
+  const nickname = String(req.body?.nickname || username).trim().slice(0, 24);
+  const result = accounts.registerUser(username, password, nickname);
+  if (!result.ok) return apiError(res, result.error);
+  return res.json({ ok: true, token: result.token, username: result.user.username, nickname: result.user.nickname });
+});
+
+app.post('/api/login', (req, res) => {
+  const username = String(req.body?.username || '');
+  const password = String(req.body?.password || '');
+  const result = accounts.loginUser(username, password);
+  if (!result.ok) return apiError(res, result.error);
+  return res.json({ ok: true, token: result.token, username: result.user.username, nickname: result.user.nickname });
+});
+
+app.get('/api/me', (req, res) => {
+  const token = getTokenFromReq(req);
+  const user = token ? accounts.getUserByToken(token) : null;
+  if (!user) return apiError(res, '로그인 상태가 아닙니다.', 401);
+  return res.json({ ok: true, username: user.username, nickname: user.nickname });
+});
 
 const spritePaths = [
   path.join(__dirname, '../public/spritesheet.png'),
@@ -66,15 +160,39 @@ app.get('/game-assets/spritesheet.png', (req, res) => {
 });
 
 io.on('connection', (socket) => {
-  socket.data.nickname = `손님${socket.id.slice(0, 4)}`;
+  const authToken = socket.handshake.auth?.token;
+  const account = authToken ? accounts.getUserByToken(authToken) : null;
+  socket.data.account = account || null;
+  socket.data.nickname = account?.username || `손님${socket.id.slice(0, 4)}`;
   socket.data.roomId = null;
 
-  socket.emit('hello', { id: socket.id, nickname: socket.data.nickname });
+  socket.emit('hello', {
+    id: socket.id,
+    nickname: socket.data.nickname,
+    username: account?.username || null,
+  });
 
   socket.on('user:nickname', (payload) => {
     const n = typeof payload?.nickname === 'string' ? payload.nickname.trim().slice(0, 24) : '';
-    if (n) socket.data.nickname = n;
-    socket.emit('user:me', { id: socket.id, nickname: socket.data.nickname });
+    if (!n) return;
+    socket.data.nickname = n;
+    if (socket.data.account) {
+      const updated = accounts.updateNickname(socket.data.account.username, n);
+      if (updated) socket.data.account = { ...socket.data.account, nickname: updated.nickname };
+    }
+    if (socket.data.roomId) {
+      const room = rm.getRoom(socket.data.roomId);
+      if (room) {
+        const player = room.players.find((p) => p.socketId === socket.id);
+        if (player) player.nickname = n;
+        emitRoster(io, room);
+      }
+    }
+    socket.emit('user:me', {
+      id: socket.id,
+      nickname: socket.data.nickname,
+      username: socket.data.account?.username || null,
+    });
   });
 
   socket.on('room:create', (_payload, ack) => {
@@ -115,22 +233,34 @@ io.on('connection', (socket) => {
   socket.on('room:leave', () => {
     const rid = socket.data.roomId;
     if (!rid) return;
+    const room = rm.getRoom(rid);
+    const leavingName = socket.data.nickname || '플레이어';
+    if (room && room.game.phase === 'playing') {
+      io.to(`room:${rid}`).emit('room:closed', {
+        message: `${leavingName}가 나갔습니다. 게임이 종료됩니다.`,
+        leftNickname: leavingName,
+      });
+      rm.dissolveRoom(rid);
+    }
+
     rm.leaveAllRooms(socket.id);
     socket.leave(`room:${rid}`);
     socket.data.roomId = null;
-    const room = rm.getRoom(rid);
-    if (room) {
-      emitRoster(io, room);
-      rm.broadcastState(room, io, rid);
+
+    const remaining = rm.getRoom(rid);
+    if (remaining) {
+      emitRoster(io, remaining);
+      rm.broadcastState(remaining, io, rid);
     }
   });
 
-  socket.on('room:start', () => {
+  socket.on('room:start', (payload) => {
     const rid = socket.data.roomId;
     if (!rid) return;
     const room = rm.getRoom(rid);
     if (!room) return;
-    const res = rm.startGameIfHost(rid, socket.id);
+    const gameMode = payload?.gameMode || 'normal'; // 'normal' or 'tonpufu'
+    const res = rm.startGameIfHost(rid, socket.id, gameMode);
     if (!res.ok) {
       socket.emit('game:error', { message: res.error });
       return;
@@ -233,6 +363,9 @@ io.on('connection', (socket) => {
     }
     io.to(`room:${rid}`).emit('game:event', { type: 'passRon', seat });
     rm.broadcastState(room, io, rid);
+    if (room.game.phase === 'finished' && room.game.winner === null) {
+      finalizeDrawEnd(io, rm, room, rid);
+    }
   });
 
   socket.on('game:passNaki', () => {
@@ -250,6 +383,24 @@ io.on('connection', (socket) => {
       return;
     }
     io.to(`room:${rid}`).emit('game:event', { type: 'passNaki', seat });
+    rm.broadcastState(room, io, rid);
+  });
+
+  socket.on('game:riichi', () => {
+    const rid = socket.data.roomId;
+    if (!rid) return;
+    const room = rm.getRoom(rid);
+    if (!room) return;
+    const seat = rm.findSeat(rid, socket.id);
+    if (seat < 0) {
+      socket.emit('game:error', { message: '방에 입장한 상태가 아닙니다.' });
+      return;
+    }
+    if (!declareRiichi(room.game, seat)) {
+      socket.emit('game:error', { message: room.game.error || '리치 불가' });
+      return;
+    }
+    io.to(`room:${rid}`).emit('game:event', { type: 'riichi', seat });
     rm.broadcastState(room, io, rid);
   });
 
@@ -293,12 +444,22 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     const rid = socket.data.roomId;
+    const room = rid ? rm.getRoom(rid) : null;
+    const leavingName = socket.data.nickname || '플레이어';
+    if (room && room.game.phase === 'playing') {
+      io.to(`room:${rid}`).emit('room:closed', {
+        message: `${leavingName}가 나갔습니다. 게임이 종료됩니다.`,
+        leftNickname: leavingName,
+      });
+      rm.dissolveRoom(rid);
+    }
+
     rm.leaveAllRooms(socket.id);
     if (rid) {
-      const room = rm.getRoom(rid);
-      if (room) {
-        emitRoster(io, room);
-        rm.broadcastState(room, io, rid);
+      const remaining = rm.getRoom(rid);
+      if (remaining) {
+        emitRoster(io, remaining);
+        rm.broadcastState(remaining, io, rid);
       }
     }
   });

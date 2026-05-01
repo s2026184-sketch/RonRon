@@ -1,6 +1,7 @@
-import { createTileElement, tileTitleKo } from './tiles.js';
+import { createTileElement, tileTitleKo, nextTile } from './tiles.js';
 
-const socket = io();
+const tokenKey = 'mahjong-token';
+const socket = io({ auth: { token: localStorage.getItem(tokenKey) || undefined } });
 
 socket.on('connect_error', (err) => {
   toast(`연결 실패: ${err.message || '서버가 꺼졌거나 주소가 다릅니다.'}`);
@@ -8,7 +9,8 @@ socket.on('connect_error', (err) => {
 
 const $ = (id) => document.getElementById(id);
 
-const nickKey = 'mahjong-nick';
+let account = null;
+let selectedGameMode = 'normal'; // 'normal' or 'tonpufu'
 /** 서버 좌석 0~3 = 동·남·서·북 가 */
 const SEAT_WINDS = ['동', '남', '서', '북'];
 
@@ -16,6 +18,8 @@ let mySeat = -1;
 let lastState = null;
 let roomId = null;
 let roster = { players: [] };
+let handStartScores = null;
+let handStartRanks = null;
 
 const TILE_SM = 26;
 const TILE_HAND = 46;
@@ -26,6 +30,203 @@ function toast(msg) {
   el.classList.remove('hidden');
   clearTimeout(toast._t);
   toast._t = setTimeout(() => el.classList.add('hidden'), 3200);
+}
+
+function getRanks(scores) {
+  const order = scores
+    .map((score, seat) => ({ score, seat }))
+    .sort((a, b) => b.score - a.score);
+  const ranks = Array(scores.length).fill(0);
+  let rank = 1;
+  for (let i = 0; i < order.length; i++) {
+    if (i > 0 && order[i].score < order[i - 1].score) {
+      rank = i + 1;
+    }
+    ranks[order[i].seat] = rank;
+  }
+  return ranks;
+}
+
+function formatDelta(value) {
+  if (value > 0) return `+${value}`;
+  if (value < 0) return `${value}`;
+  return '±0';
+}
+
+function isTileDora(tile, doraIndicators) {
+  if (!doraIndicators || !doraIndicators.length) return false;
+  for (const indicator of doraIndicators) {
+    const normalDora = nextTile(indicator);
+    if (tile === normalDora) return true;
+    if (tile === `${normalDora}r`) return true;
+  }
+  return false;
+}
+
+function isTileAkaDora(tile) {
+  return tile === 'm5' || tile === 'p5' || tile === 's5' || tile === 'm5r' || tile === 'p5r' || tile === 's5r';
+}
+
+function formatRankChange(beforeRank, afterRank) {
+  if (diff > 0) return `▲${diff}`;
+  if (diff < 0) return `▼${-diff}`;
+  return '—';
+}
+
+function closeSummary() {
+  const modal = $('summary-modal');
+  modal.classList.add('hidden');
+}
+
+function renderSummaryPopup(summary) {
+  const body = $('summary-body');
+  const title = summary.type === 'draw' ? '유국 결과' : `${escapeHtml(summary.winnerName)} ${summary.winText}`;
+
+  const lines = [];
+  lines.push(`<div class="summary-meta"><strong>${title}</strong></div>`);
+
+  if (summary.type !== 'draw') {
+    lines.push(`<div class="summary-meta">`);
+    lines.push(`<span>승리: ${escapeHtml(summary.winnerName)} (${escapeHtml(summary.winWind)})</span>`);
+    lines.push(`<span>승리 방식: ${escapeHtml(summary.winText)}</span>`);
+    if (summary.yakuText) {
+      lines.push(`<span>역: ${escapeHtml(summary.yakuText)}</span>`);
+    }
+    lines.push(`<span>점수: ${summary.points}점 (${summary.han}합 ${summary.fu}부)</span>`);
+    lines.push(`</div>`);
+  } else {
+    lines.push(`<div class="summary-meta">`);
+    lines.push(`<span>유국</span>`);
+    lines.push(`<span>오야 텐파이: ${summary.tenpai ? '예' : '아니오'}</span>`);
+    lines.push(`<span>${summary.keepDealer ? '오야 유지' : '오야 이동'}</span>`);
+    lines.push(`</div>`);
+  }
+
+  const rows = summary.players.map((player) => {
+    return `
+      <tr>
+        <td>${escapeHtml(player.name)}</td>
+        <td>${player.rank}</td>
+        <td>${escapeHtml(player.rankChange)}</td>
+        <td class="summary-row-score">${player.score}</td>
+        <td class="summary-row-score ${player.deltaClass}">${escapeHtml(player.delta)}</td>
+      </tr>`;
+  });
+
+  lines.push(`
+    <table class="summary-table">
+      <thead>
+        <tr>
+          <th>플레이어</th>
+          <th>등수</th>
+          <th>변동</th>
+          <th>점수</th>
+          <th>변동</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.join('')}
+      </tbody>
+    </table>`);
+
+  body.innerHTML = lines.join('');
+  $('summary-modal').classList.remove('hidden');
+}
+
+function buildSummaryForState(type, state, options = {}) {
+  const scores = state.scores || [];
+  const prevScores = handStartScores || scores;
+  const prevRanks = handStartRanks || getRanks(prevScores);
+  const newRanks = getRanks(scores);
+
+  const players = scores.map((score, seat) => {
+    const player = roster.players.find((p) => p.seat === seat);
+    const name = player?.nickname || `좌석${seat + 1}`;
+    const delta = score - (prevScores[seat] || 0);
+    return {
+      name,
+      score,
+      delta: formatDelta(delta),
+      deltaClass: delta > 0 ? 'positive' : delta < 0 ? 'negative' : 'zero',
+      rank: newRanks[seat],
+      rankChange: formatRankChange(prevRanks[seat] || newRanks[seat], newRanks[seat]),
+      seat,
+    };
+  });
+
+  players.sort((a, b) => a.rank - b.rank || b.score - a.score);
+
+  if (type === 'draw') {
+    return {
+      type: 'draw',
+      tenpai: options.tenpai,
+      keepDealer: options.keepDealer,
+      players,
+    };
+  }
+
+  const winner = options.winnerSeat;
+  const winnerName = options.winnerName || players.find((p) => p.seat === winner)?.name || '';
+  const winWind = options.winWind || '';
+  const yakuText = options.yakuText || '';
+
+  return {
+    type: 'win',
+    winnerName,
+    winText: options.winText || '',
+    winWind,
+    yakuText,
+    han: options.han || 0,
+    fu: options.fu || 0,
+    points: options.points || 0,
+    players,
+  };
+}
+
+function setHandStartState(state) {
+  if (!state || state.phase !== 'playing') return;
+  if (!lastState || lastState.phase !== 'playing' || state.round !== lastState.round || state.honba !== lastState.honba) {
+    handStartScores = [...state.scores];
+    handStartRanks = getRanks(handStartScores);
+  }
+}
+
+function setAuthState(user) {
+  account = user;
+  const authLine = $('auth-line');
+  const logoutButton = $('btn-logout');
+  const loginInputs = [$('auth-username'), $('auth-password'), $('btn-login'), $('btn-register')];
+
+  if (user) {
+    authLine.textContent = `로그인됨: ${user.username}`;
+    logoutButton.classList.remove('hidden');
+    loginInputs.forEach((el) => { if (el) el.disabled = true; });
+  } else {
+    authLine.textContent = '계정이 필요합니다. 로그인하거나 회원가입하세요.';
+    logoutButton.classList.add('hidden');
+    loginInputs.forEach((el) => { if (el) el.disabled = false; });
+  }
+}
+
+setAuthState(null);
+
+// 자동 로그인
+const token = localStorage.getItem(tokenKey);
+if (token) {
+  fetch('/api/me', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) {
+      setAuthState(data);
+    } else {
+      localStorage.removeItem(tokenKey);
+    }
+  })
+  .catch(() => {
+    localStorage.removeItem(tokenKey);
+  });
 }
 
 function seatWindLabel(seat) {
@@ -64,12 +265,6 @@ function renderRoster() {
   const me = roster.players.find((p) => p.you);
   const imHost = Boolean(me?.host);
   $('btn-start').disabled = !(roomId && roster.players.length === 4 && imHost);
-  updateRestartButton(imHost);
-}
-
-function updateRestartButton(imHost) {
-  const done = lastState && lastState.phase === 'finished';
-  $('btn-restart').disabled = !(imHost && roster.players.length === 4 && done);
 }
 
 function renderDiscardStrip(container, seat, state, tileSize) {
@@ -83,7 +278,9 @@ function renderDiscardStrip(container, seat, state, tileSize) {
       state.lastDiscard.seat === seat &&
       i === disc.length - 1 &&
       t === state.lastDiscard.tile;
-    row.appendChild(createTileElement(t, { size: tileSize, highlight: isLastRiver }));
+    const isDora = isTileDora(t, state.doraIndicators);
+    const className = isDora ? 'tile-dora' : '';
+    row.appendChild(createTileElement(t, { size: tileSize, highlight: isLastRiver, className }));
   });
   container.appendChild(row);
 }
@@ -114,6 +311,14 @@ function renderPlayerZone(zoneEl, rel, state, names) {
     head.appendChild(o);
   }
 
+  // 리치 표시
+  if (state.riichi && state.riichi[seat]) {
+    const r = document.createElement('span');
+    r.className = 'badge-riichi';
+    r.textContent = '리치';
+    head.appendChild(r);
+  }
+
   const turnOk =
     state.phase === 'playing' &&
     !state.waitingRon &&
@@ -136,6 +341,22 @@ function renderPlayerZone(zoneEl, rel, state, names) {
 
   zoneEl.appendChild(head);
 
+  // 점수 표시
+  if (state.scores) {
+    const scoreEl = document.createElement('div');
+    scoreEl.className = 'player-score';
+    scoreEl.textContent = state.scores[seat];
+    zoneEl.appendChild(scoreEl);
+  }
+
+  // 리치봉 (이치봉)
+  const richiStick = document.createElement('div');
+  richiStick.className = 'richi-stick';
+  if (state.riichi && state.riichi[seat]) {
+    richiStick.classList.add('active');
+  }
+  zoneEl.appendChild(richiStick);
+
   const melds = state.melds[seat] || [];
   if (melds.length) {
     const mw = document.createElement('div');
@@ -143,7 +364,11 @@ function renderPlayerZone(zoneEl, rel, state, names) {
     melds.forEach((m) => {
       const mr = document.createElement('div');
       mr.className = 'meld-row';
-      m.tiles.forEach((t) => mr.appendChild(createTileElement(t, { size: 22 })));
+      m.tiles.forEach((t) => {
+        const isDora = isTileDora(t, state.doraIndicators);
+        const className = isDora ? 'tile-dora' : '';
+        mr.appendChild(createTileElement(t, { size: 22, className }));
+      });
       mw.appendChild(mr);
     });
     zoneEl.appendChild(mw);
@@ -167,6 +392,30 @@ function renderGame(state) {
 
   const names = roster.players.map((p) => p.nickname);
   $('wall-count-disp').textContent = String(state.wallLeft ?? '—');
+
+  // 장풍 표시
+  const roundWindEl = $('round-wind');
+  if (roundWindEl) {
+    const windLabels = ['동', '남', '서', '북'];
+    let windText = `장풍: ${windLabels[state.prevalentWind || 0]}`;
+    if (state.gameMode === 'tonpufu') {
+      windText += ` · 동${state.round || 1}국`;
+      if (state.honba > 0) {
+        windText += ` · ${state.honba}본장`;
+      }
+    }
+    roundWindEl.textContent = windText;
+  }
+
+  // 도라 표시패 렌더링
+  const doraContainer = $('dora-indicators');
+  doraContainer.innerHTML = '';
+  if (state.doraIndicators && state.doraIndicators.length > 0) {
+    state.doraIndicators.forEach((tile) => {
+      const tileEl = createTileElement(tile, { size: 28 });
+      doraContainer.appendChild(tileEl);
+    });
+  }
 
   const status = $('game-status');
   let main = `산패 ${state.wallLeft}장 · 오야(동가) ${seatWindLabel(state.dealer ?? 0)}가 · 나는 ${seatWindLabel(mySeat)}가`;
@@ -236,30 +485,55 @@ function renderGame(state) {
 
   mine.forEach((t) => {
     const clickable = canDiscard && t !== 'back';
+    const isDora = isTileDora(t, state.doraIndicators);
+    const className = isDora ? 'tile-dora' : '';
     handEl.appendChild(
       createTileElement(t, {
         size: TILE_HAND,
         clickable,
         onClick: clickable ? () => socket.emit('game:discard', { tile: t }) : undefined,
+        className,
       })
     );
   });
 
   const imDiscarder = state.lastDiscard && state.lastDiscard.seat === mySeat;
   const conc = mine.filter((x) => x !== 'back').length;
-  const canRon =
-    state.waitingRon && !imDiscarder && conc === 13 - 3 * myMeldCount;
+  const canAttemptRon = state.waitingRon && !imDiscarder;
   const alreadyPassed = (state.ronPasses || []).includes(mySeat);
+  const showRonButton = !!state.canRon && canAttemptRon && !alreadyPassed;
+  const showPassButton = !!state.canRon && canAttemptRon && !alreadyPassed;
 
-  $('btn-tsumo').disabled = !(
-    state.phase === 'playing' &&
+  if (
+    state.waitingRon &&
+    !state.canRon &&
+    !imDiscarder &&
+    !alreadyPassed &&
+    mySeat >= 0
+  ) {
+    socket.emit('game:passRon');
+  }
+
+  const showTsumoButton = !!state.canTsumo;
+
+  $('btn-tsumo').disabled = !showTsumoButton;
+  $('btn-tsumo').classList.toggle('hidden', !showTsumoButton);
+  $('btn-ron').classList.toggle('hidden', !showRonButton);
+  $('btn-pass-ron').classList.toggle('hidden', !showPassButton);
+  $('btn-ron').disabled = !showRonButton;
+  $('btn-pass-ron').disabled = !showPassButton;
+
+  // 리치 버튼 표시 (자기 차례이고, 멘젠 상태이고, 1000점 이상이고, 아직 리치하지 않음)
+  const canRiichi = state.phase === 'playing' &&
     !state.waitingRon &&
     !state.waitingNaki &&
     state.current === mySeat &&
-    mine.length === needDrawn
-  );
-  $('btn-ron').disabled = !(canRon && !alreadyPassed);
-  $('btn-pass-ron').disabled = !(canRon && !alreadyPassed);
+    mySeat >= 0 &&
+    (state.melds[mySeat] || []).length === 0 &&
+    (state.scores[mySeat] || 0) >= 1000 &&
+    !(state.riichi && state.riichi[mySeat]);
+  $('btn-riichi').classList.toggle('hidden', !canRiichi);
+  $('btn-riichi').disabled = !canRiichi;
 
   const nakiMe = state.waitingNaki && state.nakiCurrentSeat === mySeat;
   const nakiBar = $('naki-bar');
@@ -281,12 +555,16 @@ function renderGame(state) {
     });
     if (chiPairs.length > 1) sel.classList.remove('hidden');
     else sel.classList.add('hidden');
+
+    // Show/hide buttons based on canChi, canPon, canPassNaki
+    $('btn-chi').classList.toggle('hidden', !state.canChi);
+    $('btn-pon').classList.toggle('hidden', !state.canPon);
+    $('btn-pass-naki').classList.toggle('hidden', !state.canPassNaki);
   } else {
     nakiBar.classList.add('hidden');
   }
 
-  const me = roster.players.find((p) => p.you);
-  updateRestartButton(Boolean(me?.host));
+  // no restart button in this version
 }
 
 socket.on('connect', () => {
@@ -295,15 +573,63 @@ socket.on('connect', () => {
 
 socket.on('hello', () => {
   const saved = localStorage.getItem(nickKey);
-  if (saved) socket.emit('user:nickname', { nickname: saved });
+  const hasToken = Boolean(localStorage.getItem(tokenKey));
+  if (!hasToken && saved) socket.emit('user:nickname', { nickname: saved });
 });
 
 socket.on('user:me', (p) => {
   $('me-line').dataset.nick = p.nickname;
   $('me-line').textContent = `나: ${p.nickname}`;
   $('nick').value = p.nickname;
-  localStorage.setItem(nickKey, p.nickname);
+  if (p.username) {
+    setAuthState({ username: p.username, nickname: p.nickname });
+  } else {
+    setAuthState(null);
+    localStorage.setItem(nickKey, p.nickname);
+  }
   renderRoster();
+});
+
+async function authAction(endpoint) {
+  const username = $('auth-username').value.trim();
+  const password = $('auth-password').value;
+  if (!username || !password) {
+    toast('아이디와 비밀번호를 입력하세요.');
+    return null;
+  }
+
+  try {
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, nickname: $('nick').value.trim() || username }),
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data?.ok) {
+      toast(data?.error || '인증에 실패했습니다.');
+      return null;
+    }
+    localStorage.setItem(tokenKey, data.token);
+    socket.auth = { token: data.token };
+    socket.disconnect();
+    socket.connect();
+    toast(`${endpoint === '/api/login' ? '로그인' : '회원가입'} 성공했습니다.`);
+    return data;
+  } catch (error) {
+    toast(error.message || '서버 오류가 발생했습니다.');
+    return null;
+  }
+}
+
+$('btn-login').addEventListener('click', () => authAction('/api/login'));
+$('btn-register').addEventListener('click', () => authAction('/api/register'));
+$('btn-logout').addEventListener('click', () => {
+  localStorage.removeItem(tokenKey);
+  socket.auth = { token: null };
+  socket.disconnect();
+  socket.connect();
+  setAuthState(null);
+  toast('로그아웃되었습니다.');
 });
 
 socket.on('room:roster', (r) => {
@@ -344,13 +670,62 @@ function escapeHtml(s) {
 }
 
 socket.on('game:state', (state) => {
+  setHandStartState(state);
   lastState = state;
   renderGame(state);
 });
 
 socket.on('game:over', (p) => {
+  if (!lastState) return;
+  const winner = lastState.winner;
+  const yaku = (lastState.yaku && winner != null && lastState.yaku[winner]) ? lastState.yaku[winner] : [];
+  const yakuText = yaku.length ? yaku.map((y) => y.name).join(', ') : '없음';
+  const summary = buildSummaryForState('win', lastState, {
+    winnerSeat: winner,
+    winnerName: p?.winnerNickname || `좌석${winner + 1}`,
+    winText: p?.winType === 'ron' ? '론' : p?.winType === 'tsumo' ? '쯔모' : '승리',
+    winWind: seatWindLabel(winner),
+    yakuText,
+    han: lastState.han[winner] || 0,
+    fu: lastState.fu[winner] || 0,
+    points: lastState.points[winner] || 0,
+  });
+  renderSummaryPopup(summary);
+
   const label = p?.winType === 'ron' ? '론' : p?.winType === 'tsumo' ? '쯔모' : '승리';
-  toast(`${p?.winnerNickname || '승자'} ${label}! 방이 닫혔습니다.`);
+  toast(`${p?.winnerNickname || '승자'} ${label}!`);
+});
+
+socket.on('game:next-round', (p) => {
+  toast(p.message || `다음 판 시작!`);
+});
+
+socket.on('game:draw', (p) => {
+  if (lastState) {
+    const summary = buildSummaryForState('draw', lastState, {
+      tenpai: Boolean(p?.tenpai),
+      keepDealer: Boolean(p?.keepDealer),
+    });
+    renderSummaryPopup(summary);
+  }
+  toast(p.message || '유국이 발생했습니다.');
+});
+
+socket.on('room:closed', (p) => {
+  toast(p.message || '플레이어가 나갔습니다.');
+  roomId = null;
+  roster = { players: [] };
+  mySeat = -1;
+  lastState = null;
+  $('panel-game').classList.add('hidden');
+  $('app').classList.remove('table-focus');
+  updateRoomCodeRow();
+  renderRoster();
+  closeSummary();
+});
+
+socket.on('game:tonpufu-finished', (p) => {
+  toast(p.message || '동풍전이 종료되었습니다!');
   roomId = null;
   roster = { players: [] };
   mySeat = -1;
@@ -363,9 +738,19 @@ socket.on('game:over', (p) => {
 
 socket.on('game:error', (e) => toast(e.message || '오류'));
 
-$('btn-save-nick').addEventListener('click', () => {
-  const v = $('nick').value.trim();
-  if (v) socket.emit('user:nickname', { nickname: v });
+$('btn-summary-close').addEventListener('click', closeSummary);
+$('btn-summary-close-bottom').addEventListener('click', closeSummary);
+
+$('btn-mode-normal').addEventListener('click', () => {
+  selectedGameMode = 'normal';
+  $('btn-mode-normal').classList.add('active');
+  $('btn-mode-tonpufu').classList.remove('active');
+});
+
+$('btn-mode-tonpufu').addEventListener('click', () => {
+  selectedGameMode = 'tonpufu';
+  $('btn-mode-normal').classList.remove('active');
+  $('btn-mode-tonpufu').classList.add('active');
 });
 
 $('btn-copy-room').addEventListener('click', async () => {
@@ -425,12 +810,12 @@ $('btn-leave').addEventListener('click', () => {
   renderRoster();
 });
 
-$('btn-start').addEventListener('click', () => socket.emit('room:start'));
-$('btn-restart').addEventListener('click', () => socket.emit('game:restart'));
+$('btn-start').addEventListener('click', () => socket.emit('room:start', { gameMode: selectedGameMode }));
 
 $('btn-tsumo').addEventListener('click', () => socket.emit('game:tsumo'));
 $('btn-ron').addEventListener('click', () => socket.emit('game:ron'));
 $('btn-pass-ron').addEventListener('click', () => socket.emit('game:passRon'));
+$('btn-riichi').addEventListener('click', () => socket.emit('game:riichi'));
 
 $('btn-pon').addEventListener('click', () => socket.emit('game:pon'));
 

@@ -140,6 +140,15 @@ button.ghost:hover:not(:disabled) {
   background: rgba(78, 52, 34, 0.35);
 }
 
+button.active {
+  background: var(--grad-green-up);
+  box-shadow: 0 2px 8px rgba(45, 143, 99, 0.45);
+}
+
+button.active:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
 .muted {
   color: var(--muted);
   font-size: 0.86rem;
@@ -201,6 +210,114 @@ button.ghost:hover:not(:disabled) {
   align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 0.65rem;
+}
+
+.summary-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 8, 4, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 50;
+}
+
+.summary-card {
+  width: min(720px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  background: rgba(19, 47, 30, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  padding: 1.2rem 1.2rem 0.9rem;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+}
+
+summary-modal.hidden,
+.summary-modal.hidden {
+  display: none !important;
+}
+
+.summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.summary-head h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.summary-body {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.summary-meta {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.summary-table th,
+.summary-table td {
+  padding: 0.75rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.95rem;
+}
+
+.summary-table th {
+  color: var(--felt-edge);
+  font-weight: 700;
+}
+
+.summary-table td {
+  color: var(--text);
+}
+
+.summary-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(184, 58, 58, 0.18);
+  color: #fff;
+  font-size: 0.85rem;
+}
+
+.summary-row-score {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.summary-delta.positive {
+  color: #a8ff9c;
+}
+
+.summary-delta.negative {
+  color: #ff9c9c;
+}
+
+.summary-delta.zero {
+  color: var(--muted);
+}
+
+.summary-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.85rem 0 0.4rem;
 }
 
 .status-main {
@@ -346,6 +463,63 @@ button.ghost:hover:not(:disabled) {
   margin-top: 2px;
 }
 
+.round-wind {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #f4e4a6;
+  margin-top: 4px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.dora-display {
+  margin-top: 6px;
+}
+
+.dora-indicators {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  min-height: 32px;
+  align-items: center;
+}
+
+.dora-label {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.player-score {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #e8dcc8;
+  text-align: center;
+  margin: 4px 0;
+  padding: 2px 6px;
+  background: rgba(13, 26, 18, 0.6);
+  border-radius: 4px;
+  border: 1px solid rgba(78, 52, 34, 0.3);
+}
+
+.richi-stick {
+  width: 20px;
+  height: 4px;
+  background: #666;
+  border-radius: 2px;
+  margin: 2px auto;
+  border: 1px solid #444;
+  opacity: 0.3;
+  transition: all 0.3s ease;
+}
+
+.richi-stick.active {
+  background: #ffdd44;
+  border-color: #ccaa22;
+  opacity: 1;
+  box-shadow: 0 0 6px rgba(255, 221, 68, 0.8);
+}
+
 .strip-head {
   display: flex;
   flex-wrap: wrap;
@@ -404,6 +578,17 @@ button.ghost:hover:not(:disabled) {
   font-weight: 800;
 }
 
+.badge-riichi {
+  font-size: 0.65rem;
+  padding: 1px 5px;
+  border-radius: 50%;
+  background: #ff4444;
+  color: #ffffff;
+  font-weight: 800;
+  border: 2px solid #cc0000;
+  box-shadow: 0 0 4px rgba(255, 68, 68, 0.6);
+}
+
 .strip-discards {
   display: flex;
   flex-wrap: wrap;
@@ -445,7 +630,7 @@ button.ghost:hover:not(:disabled) {
   border-radius: 5px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
   background-repeat: no-repeat;
-  vertical-align: middle;
+  vertical-align: top;
 }
 
 .tile-sprite--back {
@@ -492,6 +677,37 @@ button.ghost:hover:not(:disabled) {
 
 .actions button {
   min-width: 5rem;
+}
+
+#btn-tsumo {
+  background: linear-gradient(to bottom, #ff8c00, #ff4500);
+  box-shadow: 0 2px 8px rgba(255, 140, 0, 0.45);
+}
+
+#btn-ron {
+  background: linear-gradient(to bottom, #ff4444, #cc0000);
+  box-shadow: 0 2px 8px rgba(255, 68, 68, 0.45);
+}
+
+#btn-chi {
+  background: linear-gradient(to bottom, #32cd32, #228b22);
+  box-shadow: 0 2px 8px rgba(50, 205, 50, 0.45);
+}
+
+#btn-pon {
+  background: linear-gradient(to bottom, #4169e1, #0000cd);
+  box-shadow: 0 2px 8px rgba(65, 105, 225, 0.45);
+}
+
+#btn-pass-ron,
+#btn-pass-naki {
+  background: linear-gradient(to bottom, #808080, #555555);
+  box-shadow: 0 2px 8px rgba(128, 128, 128, 0.45);
+}
+
+#btn-riichi {
+  background: linear-gradient(to bottom, #ffd700, #ffb000);
+  box-shadow: 0 2px 8px rgba(255, 215, 0, 0.45);
 }
 
 .naki-bar {
@@ -579,4 +795,21 @@ button.ghost:hover:not(:disabled) {
   .compass-ring .c {
     font-size: 0.8rem;
   }
+}
+
+.score-display {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.25rem 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.score-item {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  color: var(--text);
+  font-weight: 600;
 }

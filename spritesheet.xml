@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<TextureAtlas imagePath="spritesheet.png" width="488" height="1566">
+<TextureAtlas imagePath="spritesheet.png" width="488" height="1740">
   <SubTexture name="frame_000" x="0" y="0" width="122" height="174"/>
   <SubTexture name="frame_001" x="122" y="0" width="122" height="174"/>
   <SubTexture name="frame_002" x="244" y="0" width="122" height="174"/>
@@ -34,4 +34,7 @@
   <SubTexture name="frame_031" x="366" y="1218" width="122" height="174"/>
   <SubTexture name="frame_032" x="0" y="1392" width="122" height="174"/>
   <SubTexture name="frame_033" x="122" y="1392" width="122" height="174"/>
+  <SubTexture name="frame_034" x="244" y="1392" width="122" height="174"/>
+  <SubTexture name="frame_035" x="366" y="1392" width="122" height="174"/>
+  <SubTexture name="frame_036" x="0" y="1566" width="122" height="174"/>
 </TextureAtlas>

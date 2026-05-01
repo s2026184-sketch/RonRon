@@ -38,3 +38,18 @@
 .sprite-31 { background-position: -366px -1218px; }
 .sprite-32 { background-position: -0px -1392px; }
 .sprite-33 { background-position: -122px -1392px; }
+.sprite-34 { background-position: -244px -1392px; } /* Red 5m */
+.sprite-35 { background-position: -366px -1392px; } /* Red 5p */
+.sprite-36 { background-position: -0px -1566px; } /* Red 5s */
+
+/* Dora effect */
+.tile-dora {
+  position: relative;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.8), 0 0 20px rgba(255, 215, 0, 0.4);
+  animation: dora-glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes dora-glow {
+  from { box-shadow: 0 0 10px rgba(255, 215, 0, 0.8), 0 0 20px rgba(255, 215, 0, 0.4); }
+  to { box-shadow: 0 0 15px rgba(255, 215, 0, 1), 0 0 30px rgba(255, 215, 0, 0.6); }
+}

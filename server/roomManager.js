@@ -86,13 +86,13 @@ export function createRoomManager() {
       return p ? p.seat : -1;
     },
 
-    /** @param {string} roomId */
-    startGameIfHost(roomId, socketId) {
+    /** @param {string} roomId @param {string} socketId */
+    startGameIfHost(roomId, socketId, gameMode = 'normal') {
       const room = rooms.get(roomId);
       if (!room) return { ok: false, error: '방을 찾을 수 없습니다.' };
       if (room.players.length !== SEATS) return { ok: false, error: `시작하려면 ${SEATS}명이 필요합니다.` };
       if (room.players[0]?.socketId !== socketId) return { ok: false, error: '첫 입장자만 게임을 시작할 수 있습니다.' };
-      startGame(room.game, 0);
+      startGame(room.game, 0, gameMode, 1, 0);
       return { ok: true, room };
     },
 
@@ -119,7 +119,28 @@ export function createRoomManager() {
       if (!room) return { ok: false, error: '방을 찾을 수 없습니다.' };
       if (room.players[0]?.socketId !== socketId) return { ok: false, error: '첫 입장자만 다시 시작할 수 있습니다.' };
       if (room.players.length !== SEATS) return { ok: false, error: `다시 시작하려면 ${SEATS}명이 필요합니다.` };
-      startGame(room.game, 0);
+      // 기존 gameMode 유지, 새 게임으로 초기화
+      const gameMode = room.game.gameMode || 'normal';
+      startGame(room.game, 0, gameMode, 1, 0);
+      return { ok: true, room };
+    },
+
+    /** 동풍전 자동 다음 판 시작 */
+    autoStartNextRound(roomId, keepDealer = false) {
+      const room = rooms.get(roomId);
+      if (!room) return { ok: false, error: '방을 찾을 수 없습니다.' };
+      if (room.game.gameMode !== 'tonpufu') return { ok: false, error: '동풍전 모드가 아닙니다.' };
+
+      if (!keepDealer) {
+        room.game.round++;
+        if (room.game.round > 4) {
+          return { ok: false, error: '동풍전이 종료되었습니다.' };
+        }
+      }
+      
+      const nextDealer = keepDealer ? room.game.dealer : (room.game.dealer + 1) % SEATS;
+      room.game.honba = keepDealer ? room.game.honba + 1 : 0;
+      startGame(room.game, nextDealer, 'tonpufu', room.game.round, room.game.honba);
       return { ok: true, room };
     },
 

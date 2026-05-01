@@ -14,15 +14,24 @@
       </header>
 
       <section id="panel-auth" class="card">
-        <label>닉네임</label>
-        <div class="row">
-          <input id="nick" type="text" maxlength="24" placeholder="닉네임" autocomplete="username" />
-          <button type="button" id="btn-save-nick">저장</button>
+        <label>계정</label>
+        <div class="row wrap">
+          <input id="auth-username" type="text" maxlength="24" placeholder="아이디" autocomplete="username" />
+          <input id="auth-password" type="password" maxlength="72" placeholder="비밀번호" autocomplete="current-password" />
+          <button type="button" id="btn-login">로그인</button>
+          <button type="button" id="btn-register">회원가입</button>
+          <button type="button" id="btn-logout" class="ghost hidden">로그아웃</button>
         </div>
-        <p id="me-line" class="muted"></p>
+        <p id="auth-line" class="muted"></p>
       </section>
 
       <section id="panel-lobby" class="card">
+        <h2>게임 모드</h2>
+        <div class="row wrap">
+          <button type="button" id="btn-mode-normal" class="active">4인 4판</button>
+          <button type="button" id="btn-mode-tonpufu">동풍전</button>
+        </div>
+
         <h2>방</h2>
         <div class="row wrap">
           <button type="button" id="btn-create">방 만들기</button>
@@ -38,7 +47,6 @@
         <div id="roster"></div>
         <div class="row wrap">
           <button type="button" id="btn-start" disabled>게임 시작 (4명·방장)</button>
-          <button type="button" id="btn-restart" class="ghost" disabled>한 판 더</button>
         </div>
       </section>
 
@@ -70,6 +78,11 @@
             <div class="table-mid-inner">
               <div class="wall-count" id="wall-count-disp">—</div>
               <div class="wall-sub">남은 산패 · 테이블 위가 북쪽</div>
+              <div class="round-wind" id="round-wind">장풍: 동</div>
+              <div class="dora-display">
+                <div class="dora-indicators" id="dora-indicators"></div>
+                <div class="dora-label">도라 표시패</div>
+              </div>
             </div>
           </div>
           <div id="zone-right" class="pz pz-right"></div>
@@ -89,8 +102,22 @@
           <button type="button" id="btn-tsumo" disabled>쯔모</button>
           <button type="button" id="btn-ron" disabled>론</button>
           <button type="button" id="btn-pass-ron" disabled>론 패스</button>
+          <button type="button" id="btn-riichi" disabled>리치</button>
         </div>
       </section>
+
+      <div id="summary-modal" class="summary-modal hidden" aria-hidden="true">
+        <div class="summary-card">
+          <div class="summary-head">
+            <h3>매국 결과</h3>
+            <button type="button" id="btn-summary-close" class="ghost">닫기</button>
+          </div>
+          <div id="summary-body"></div>
+          <div class="summary-actions">
+            <button type="button" id="btn-summary-close-bottom" class="ghost">확인</button>
+          </div>
+        </div>
+      </div>
 
       <p id="toast" class="toast hidden" role="status"></p>
     </div>
