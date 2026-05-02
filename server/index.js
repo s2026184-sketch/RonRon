@@ -15,6 +15,7 @@ import {
   declarePon,
   declareChi,
   declareRiichi,
+  declareKan,
   isTenpai,
 } from './game/mahjongGame.js';
 
@@ -55,6 +56,13 @@ function finalizeMatchWin(io, rm, room, rid, winnerSeat, winType) {
     winType,
     winnerSeat,
     winnerNickname: wn,
+    yaku: room.game.yaku[winnerSeat],
+    fu: room.game.fu[winnerSeat],
+    han: room.game.han[winnerSeat],
+    points: room.game.points[winnerSeat],
+    scoreChanges: room.game.scoreChanges,
+    doraIndicators: room.game.doraIndicators,
+    uraDoraIndicators: room.game.uraDoraIndicators,
   });
   
   if (room.game.gameMode === 'tonpufu') {
@@ -440,6 +448,28 @@ io.on('connection', (socket) => {
     }
     io.to(`room:${rid}`).emit('game:event', { type: 'chi', seat, tileA: a, tileB: b });
     rm.broadcastState(room, io, rid);
+  });
+
+  socket.on('game:kan', (payload) => {
+    const rid = socket.data.roomId;
+    if (!rid) return;
+    const room = rm.getRoom(rid);
+    if (!room) return;
+    const seat = rm.findSeat(rid, socket.id);
+    if (seat < 0) {
+      socket.emit('game:error', { message: '방에 입장한 상태가 아닙니다.' });
+      return;
+    }
+    const tile = typeof payload?.tile === 'string' ? payload.tile : null;
+    if (!declareKan(room.game, seat, tile)) {
+      socket.emit('game:error', { message: room.game.error || '깡 불가' });
+      return;
+    }
+    io.to(`room:${rid}`).emit('game:event', { type: 'kan', seat, tile });
+    rm.broadcastState(room, io, rid);
+    if (room.game.phase === 'finished' && room.game.winner === null) {
+      finalizeDrawEnd(io, rm, room, rid);
+    }
   });
 
   socket.on('disconnect', () => {

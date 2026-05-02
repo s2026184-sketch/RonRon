@@ -302,15 +302,15 @@ summary-modal.hidden,
   white-space: nowrap;
 }
 
-.summary-delta.positive {
+.summary-row-score.summary-delta.positive {
   color: #a8ff9c;
 }
 
-.summary-delta.negative {
+.summary-row-score.summary-delta.negative {
   color: #ff9c9c;
 }
 
-.summary-delta.zero {
+.summary-row-score.summary-delta.zero {
   color: var(--muted);
 }
 
@@ -482,6 +482,17 @@ summary-modal.hidden,
   gap: 4px;
   min-height: 32px;
   align-items: center;
+}
+
+.ura-dora-label {
+  font-size: 0.7rem;
+  color: #ffd700;
+  margin-left: 6px;
+  margin-right: 6px;
+}
+
+.tile-ura {
+  opacity: 0.8;
 }
 
 .dora-label {

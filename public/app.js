@@ -68,6 +68,7 @@ function isTileAkaDora(tile) {
 }
 
 function formatRankChange(beforeRank, afterRank) {
+  const diff = beforeRank - afterRank;
   if (diff > 0) return `▲${diff}`;
   if (diff < 0) return `▼${-diff}`;
   return '—';
@@ -93,6 +94,14 @@ function renderSummaryPopup(summary) {
       lines.push(`<span>역: ${escapeHtml(summary.yakuText)}</span>`);
     }
     lines.push(`<span>점수: ${summary.points}점 (${summary.han}합 ${summary.fu}부)</span>`);
+    if (summary.doraIndicators && summary.doraIndicators.length > 0) {
+      const doraTiles = summary.doraIndicators.map(tile => `<span class="tile-label">${tileTitleKo(tile)}</span>`).join(' ');
+      lines.push(`<span>도라: ${doraTiles}</span>`);
+    }
+    if (summary.uraDoraIndicators && summary.uraDoraIndicators.length > 0) {
+      const uraTiles = summary.uraDoraIndicators.map(tile => `<span class="tile-label">${tileTitleKo(tile)}</span>`).join(' ');
+      lines.push(`<span>우라도라: ${uraTiles}</span>`);
+    }
     lines.push(`</div>`);
   } else {
     lines.push(`<div class="summary-meta">`);
@@ -109,7 +118,7 @@ function renderSummaryPopup(summary) {
         <td>${player.rank}</td>
         <td>${escapeHtml(player.rankChange)}</td>
         <td class="summary-row-score">${player.score}</td>
-        <td class="summary-row-score ${player.deltaClass}">${escapeHtml(player.delta)}</td>
+        <td class="summary-row-score summary-delta ${player.deltaClass}">${escapeHtml(player.delta)}</td>
       </tr>`;
   });
 
@@ -179,6 +188,8 @@ function buildSummaryForState(type, state, options = {}) {
     han: options.han || 0,
     fu: options.fu || 0,
     points: options.points || 0,
+    doraIndicators: options.doraIndicators || [],
+    uraDoraIndicators: options.uraDoraIndicators || [],
     players,
   };
 }
@@ -416,6 +427,16 @@ function renderGame(state) {
       doraContainer.appendChild(tileEl);
     });
   }
+  if (state.uraDoraIndicators && state.uraDoraIndicators.length > 0) {
+    const uraSection = document.createElement('div');
+    uraSection.className = 'ura-dora-label';
+    uraSection.textContent = '우라도라:';
+    doraContainer.appendChild(uraSection);
+    state.uraDoraIndicators.forEach((tile) => {
+      const tileEl = createTileElement(tile, { size: 28, className: 'tile-ura' });
+      doraContainer.appendChild(tileEl);
+    });
+  }
 
   const status = $('game-status');
   let main = `산패 ${state.wallLeft}장 · 오야(동가) ${seatWindLabel(state.dealer ?? 0)}가 · 나는 ${seatWindLabel(mySeat)}가`;
@@ -520,18 +541,13 @@ function renderGame(state) {
   $('btn-tsumo').classList.toggle('hidden', !showTsumoButton);
   $('btn-ron').classList.toggle('hidden', !showRonButton);
   $('btn-pass-ron').classList.toggle('hidden', !showPassButton);
+  $('btn-kan').classList.toggle('hidden', !state.canKan);
   $('btn-ron').disabled = !showRonButton;
   $('btn-pass-ron').disabled = !showPassButton;
+  $('btn-kan').disabled = !state.canKan;
 
   // 리치 버튼 표시 (자기 차례이고, 멘젠 상태이고, 1000점 이상이고, 아직 리치하지 않음)
-  const canRiichi = state.phase === 'playing' &&
-    !state.waitingRon &&
-    !state.waitingNaki &&
-    state.current === mySeat &&
-    mySeat >= 0 &&
-    (state.melds[mySeat] || []).length === 0 &&
-    (state.scores[mySeat] || 0) >= 1000 &&
-    !(state.riichi && state.riichi[mySeat]);
+  const canRiichi = !!state.canRiichi;
   $('btn-riichi').classList.toggle('hidden', !canRiichi);
   $('btn-riichi').disabled = !canRiichi;
 
@@ -677,8 +693,8 @@ socket.on('game:state', (state) => {
 
 socket.on('game:over', (p) => {
   if (!lastState) return;
-  const winner = lastState.winner;
-  const yaku = (lastState.yaku && winner != null && lastState.yaku[winner]) ? lastState.yaku[winner] : [];
+  const winner = p.winnerSeat;
+  const yaku = p.yaku || [];
   const yakuText = yaku.length ? yaku.map((y) => y.name).join(', ') : '없음';
   const summary = buildSummaryForState('win', lastState, {
     winnerSeat: winner,
@@ -686,9 +702,11 @@ socket.on('game:over', (p) => {
     winText: p?.winType === 'ron' ? '론' : p?.winType === 'tsumo' ? '쯔모' : '승리',
     winWind: seatWindLabel(winner),
     yakuText,
-    han: lastState.han[winner] || 0,
-    fu: lastState.fu[winner] || 0,
-    points: lastState.points[winner] || 0,
+    han: p.han || 0,
+    fu: p.fu || 0,
+    points: p.points || 0,
+    doraIndicators: p.doraIndicators || [],
+    uraDoraIndicators: p.uraDoraIndicators || [],
   });
   renderSummaryPopup(summary);
 
@@ -816,6 +834,8 @@ $('btn-tsumo').addEventListener('click', () => socket.emit('game:tsumo'));
 $('btn-ron').addEventListener('click', () => socket.emit('game:ron'));
 $('btn-pass-ron').addEventListener('click', () => socket.emit('game:passRon'));
 $('btn-riichi').addEventListener('click', () => socket.emit('game:riichi'));
+
+$('btn-kan').addEventListener('click', () => socket.emit('game:kan'));
 
 $('btn-pon').addEventListener('click', () => socket.emit('game:pon'));
 
