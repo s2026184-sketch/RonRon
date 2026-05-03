@@ -13,20 +13,33 @@
         <p class="sub">동·남·서·북 자리 · 스프라이트 패 · 4인 론/쯔모</p>
       </header>
 
-      <section id="panel-auth" class="card">
-        <label>계정</label>
-        <div class="row wrap">
-          <input id="auth-username" type="text" maxlength="24" placeholder="아이디" autocomplete="username" />
-          <input id="auth-password" type="password" maxlength="72" placeholder="비밀번호" autocomplete="current-password" />
-          <button type="button" id="btn-login">로그인</button>
-          <button type="button" id="btn-register">회원가입</button>
-          <button type="button" id="btn-logout" class="ghost hidden">로그아웃</button>
-        </div>
-        <p id="auth-line" class="muted"></p>
-        <p id="me-line" class="muted"></p>
-      </section>
+      <div id="page-grid">
+        <div id="sidebar">
+          <section id="panel-auth" class="card auth-card">
+            <h2>로그인</h2>
+            <div class="auth-form">
+              <div class="form-group">
+                <label for="auth-username">아이디</label>
+                <input id="auth-username" type="text" maxlength="24" placeholder="아이디" autocomplete="username" />
+              </div>
+              <div class="form-group">
+                <label for="auth-password">비밀번호</label>
+                <div class="input-group password-group">
+                  <input id="auth-password" type="password" maxlength="72" placeholder="비밀번호" autocomplete="current-password" />
+                  <button type="button" id="btn-toggle-password" class="password-toggle" aria-label="비밀번호 표시">👁️</button>
+                </div>
+              </div>
+              <div class="auth-actions row wrap">
+                <button type="button" id="btn-login">로그인</button>
+                <button type="button" id="btn-register">회원가입</button>
+                <button type="button" id="btn-logout" class="ghost hidden">로그아웃</button>
+              </div>
+            </div>
+            <p id="auth-line" class="muted"></p>
+            <p id="me-line" class="muted"></p>
+          </section>
 
-      <section id="panel-lobby" class="card">
+          <section id="panel-lobby" class="card">
         <h2>게임 모드</h2>
         <div class="row wrap">
           <button type="button" id="btn-mode-normal" class="active">4인 4판</button>
@@ -59,8 +72,9 @@
           <button type="button" id="btn-chat">보내기</button>
         </div>
       </section>
+        </div>
 
-      <section id="panel-game" class="card table-card hidden">
+        <section id="panel-game" class="card table-card hidden">
         <div class="table-toolbar">
           <p id="game-status" class="status-main"></p>
           <div id="game-extra" class="status-extra"></div>

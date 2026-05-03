@@ -21,8 +21,11 @@ let roster = { players: [] };
 let handStartScores = null;
 let handStartRanks = null;
 
-const TILE_SM = 26;
-const TILE_HAND = 46;
+const TILE_SM = 40;
+const TILE_HAND = 72;
+const TILE_MELD = 38;
+const TILE_WAITING = 30;
+const TILE_DORA = 38;
 
 function toast(msg) {
   const el = $('toast');
@@ -405,7 +408,7 @@ function renderPlayerZone(zoneEl, rel, state, names) {
     const tilesWrap = document.createElement('div');
     tilesWrap.className = 'waiting-tiles-wrap';
     state.waitingTiles.forEach((tile) => {
-      const tileEl = createTileElement(tile, { size: 20 });
+      const tileEl = createTileElement(tile, { size: TILE_WAITING });
       tilesWrap.appendChild(tileEl);
     });
     waitingEl.appendChild(tilesWrap);
@@ -448,13 +451,13 @@ function renderPlayerZone(zoneEl, rel, state, names) {
           const t = m.tiles[tileIndex];
           const isDora = isTileDora(t, state.doraIndicators);
           const className = isDora ? 'tile-dora' : '';
-          baseRow.appendChild(createTileElement(t, { size: 22, className }));
+          baseRow.appendChild(createTileElement(t, { size: TILE_MELD, className }));
         }
         mr.appendChild(baseRow);
         const topTile = m.tiles[3];
         const isDora = isTileDora(topTile, state.doraIndicators);
         const className = isDora ? 'tile-dora tile-kakan-top tile-horizontal' : 'tile-kakan-top tile-horizontal';
-        mr.appendChild(createTileElement(topTile, { size: 22, className }));
+        mr.appendChild(createTileElement(topTile, { size: TILE_MELD, className }));
       } else {
         let daiminkanHorizontalIndex = null;
         if (m.type === 'kan' && m.subType === 'daiminkan' && typeof m.sourceSeat === 'number') {
@@ -470,7 +473,7 @@ function renderPlayerZone(zoneEl, rel, state, names) {
           if (isDora) tileClasses.push('tile-dora');
           if (tileIndex === daiminkanHorizontalIndex) tileClasses.push('tile-horizontal');
           const className = tileClasses.join(' ');
-          mr.appendChild(createTileElement(t, { size: 22, className }));
+          mr.appendChild(createTileElement(t, { size: TILE_MELD, className }));
         });
       }
 
@@ -517,7 +520,7 @@ function renderGame(state) {
   doraContainer.innerHTML = '';
   if (state.doraIndicators && state.doraIndicators.length > 0) {
     state.doraIndicators.forEach((tile) => {
-      const tileEl = createTileElement(tile, { size: 28 });
+      const tileEl = createTileElement(tile, { size: TILE_DORA });
       doraContainer.appendChild(tileEl);
     });
   }
@@ -527,7 +530,7 @@ function renderGame(state) {
     uraSection.textContent = '우라도라:';
     doraContainer.appendChild(uraSection);
     state.uraDoraIndicators.forEach((tile) => {
-      const tileEl = createTileElement(tile, { size: 28, className: 'tile-ura' });
+      const tileEl = createTileElement(tile, { size: TILE_DORA, className: 'tile-ura' });
       doraContainer.appendChild(tileEl);
     });
   }
@@ -730,6 +733,17 @@ async function authAction(endpoint) {
   }
 }
 
+function togglePasswordVisibility() {
+  const pwInput = $('auth-password');
+  const btn = $('btn-toggle-password');
+  if (!pwInput || !btn) return;
+  const show = pwInput.type === 'password';
+  pwInput.type = show ? 'text' : 'password';
+  btn.textContent = show ? '🙈' : '👁️';
+  btn.setAttribute('aria-label', show ? '비밀번호 숨기기' : '비밀번호 표시');
+}
+
+$('btn-toggle-password').addEventListener('click', togglePasswordVisibility);
 $('btn-login').addEventListener('click', () => authAction('/api/login'));
 $('btn-register').addEventListener('click', () => authAction('/api/register'));
 $('btn-logout').addEventListener('click', () => {

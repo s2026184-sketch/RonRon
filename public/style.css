@@ -34,13 +34,67 @@ body {
 }
 
 #app {
-  max-width: 720px;
+  max-width: 1080px;
   margin: 0 auto;
-  padding: 1rem 1.1rem 2rem;
+  padding: 1rem 1.2rem 2rem;
+}
+
+.top {
+  text-align: center;
+}
+
+#page-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  gap: 1rem;
+  width: 100%;
+}
+
+#sidebar {
+  display: grid;
+  gap: 1rem;
+  width: min(100%, 520px);
 }
 
 #app.table-focus {
-  max-width: 920px;
+  max-width: none;
+}
+
+#app.table-focus #sidebar {
+  display: none;
+}
+
+#app.table-focus #panel-game {
+  width: 100%;
+  max-width: none;
+}
+
+#panel-game {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  min-height: calc(100vh - 6rem);
+}
+
+@media (max-width: 980px) {
+  #page-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #panel-game {
+    order: 3;
+  }
+}
+
+@media (max-width: 980px) {
+  #page-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #panel-game {
+    order: 3;
+  }
 }
 
 .top h1 {
@@ -67,7 +121,8 @@ body {
 
 .card.table-card {
   border-color: rgba(184, 58, 58, 0.35);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
+  padding: 1.4rem 1.5rem;
 }
 
 .card h2 {
@@ -88,6 +143,60 @@ label {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+}
+
+.auth-form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.form-group {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.input-group {
+  position: relative;
+}
+
+.password-group input {
+  width: 100%;
+  padding-right: 3rem;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0.35rem 0.5rem;
+}
+
+.password-toggle:hover {
+  color: #fff;
+}
+
+.auth-card h2 {
+  margin: 0 0 0.8rem;
+  font-size: 1.05rem;
+  color: var(--text);
+}
+
+.auth-actions {
+  justify-content: stretch;
+}
+
+.auth-actions button {
+  flex: 1;
+}
+
+.auth-actions button.ghost {
+  flex: 0 0 auto;
 }
 
 .row.wrap {
@@ -336,15 +445,15 @@ summary-modal.hidden,
 .mahjong-table {
   display: grid;
   grid-template-columns: minmax(72px, 92px) minmax(100px, 1fr) minmax(72px, 92px);
-  grid-template-rows: auto minmax(100px, 1fr) auto;
-  gap: 8px;
-  padding: 14px 12px 16px;
+  grid-template-rows: auto minmax(150px, 1fr) auto;
+  gap: 10px;
+  padding: 22px 18px 22px;
   background: var(--felt-dark);
   border-radius: 14px;
   border: 3px solid var(--wood);
   box-shadow: 0 4px 0 var(--wood-light);
   position: relative;
-  min-height: 260px;
+  min-height: 520px;
   margin-bottom: 0.5rem;
 }
 
@@ -634,8 +743,8 @@ summary-modal.hidden,
 }
 
 .hand-label {
-  margin: 0.35rem 0 0.25rem;
-  font-size: 0.8rem;
+  margin: 0.55rem 0 0.35rem;
+  font-size: 0.9rem;
   color: var(--muted);
   font-weight: 600;
 }
@@ -643,14 +752,21 @@ summary-modal.hidden,
 .hand {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
-  margin: 0 0 0.75rem;
-  padding: 10px 12px;
-  background: rgba(13, 26, 18, 0.5);
+  gap: 8px;
+  margin: 0 0 1rem;
+  padding: 14px 16px;
+  background: rgba(13, 26, 18, 0.55);
   border-radius: 10px;
   border: 1px solid rgba(78, 52, 34, 0.55);
   justify-content: center;
-  min-height: 64px;
+  min-height: 120px;
+}
+
+.waiting-tiles-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
 }
 
 .tile-sprite {
