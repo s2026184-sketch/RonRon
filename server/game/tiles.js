@@ -7,6 +7,10 @@ export function parseTile(t) {
   return { suit, n };
 }
 
+export function normalizeTile(t) {
+  return t.endsWith('r') ? t.slice(0, -1) : t;
+}
+
 export function tileKey(suit, n) {
   return `${suit}${n}`;
 }

@@ -51,19 +51,22 @@ export function createRoomManager() {
     /**
      * @param {string} roomId
      * @param {string} socketId
-     * @param {string} nickname
+     * @param {string} displayName
+     * @param {string|null} username
      */
-    joinRoom(roomId, socketId, nickname) {
+    joinRoom(roomId, socketId, displayName, username = null) {
       const room = rooms.get(roomId);
       if (!room) return { ok: false, error: '방을 찾을 수 없습니다.' };
       if (room.players.length >= SEATS) return { ok: false, error: '방이 가득 찼습니다.' };
       const existing = room.players.find((p) => p.socketId === socketId);
       if (existing) {
-        existing.nickname = nickname.slice(0, 24);
+        existing.displayName = displayName.slice(0, 24);
+        existing.username = username;
+        existing.nickname = displayName.slice(0, 24);
         return { ok: true, room };
       }
       const seat = room.players.length;
-      room.players.push({ socketId, nickname: nickname.slice(0, 24), seat });
+      room.players.push({ socketId, displayName: displayName.slice(0, 24), username, nickname: displayName.slice(0, 24), seat });
       return { ok: true, room };
     },
 

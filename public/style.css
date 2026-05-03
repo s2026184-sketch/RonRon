@@ -513,6 +513,24 @@ summary-modal.hidden,
   border: 1px solid rgba(78, 52, 34, 0.3);
 }
 
+.waiting-tiles {
+  margin: 4px 0;
+  text-align: center;
+}
+
+.waiting-label {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.waiting-tiles-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px;
+}
+
 .richi-stick {
   width: 20px;
   height: 4px;
@@ -644,6 +662,22 @@ summary-modal.hidden,
   vertical-align: top;
 }
 
+.tile-dora {
+  border: 2px solid rgba(255, 215, 0, 0.9);
+  background-color: rgba(255, 215, 0, 0.08);
+  box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.5), 0 0 14px rgba(255, 215, 0, 0.35);
+  animation: dora-glow 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes dora-glow {
+  from {
+    box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.5), 0 0 10px rgba(255, 215, 0, 0.35);
+  }
+  to {
+    box-shadow: 0 0 0 4px rgba(255, 240, 160, 0.8), 0 0 18px rgba(255, 240, 160, 0.45);
+  }
+}
+
 .tile-sprite--back {
   background: #2a1810;
   border: 2px solid var(--wood-pale);
@@ -768,6 +802,43 @@ summary-modal.hidden,
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(78, 52, 34, 0.45);
+}
+
+.meld-row.meld-kan {
+  align-items: center;
+}
+
+.meld-row.meld-kan-ankan .tile-sprite {
+  margin: 0;
+}
+
+.tile-horizontal {
+  transform: rotate(-90deg);
+  transform-origin: center center;
+  display: inline-block;
+}
+
+.meld-row.meld-kan-daiminkan .tile-horizontal {
+}
+
+.meld-row.meld-kan-kakan {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 10px;
+}
+
+.meld-row.meld-kan-kakan .kakan-base {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.meld-row.meld-kan-kakan .tile-kakan-top {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .pz-left .melds-wrap,

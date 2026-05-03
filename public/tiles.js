@@ -85,6 +85,7 @@ export function nextTile(tile) {
  */
 export function createTileElement(code, opts = {}) {
   const { size = 40, clickable = false, onClick, highlight = false, className = '' } = opts;
+  const isHorizontal = String(className).split(/\s+/).includes('tile-horizontal');
   const idx = tileCodeToIndex(code);
   const isBack = code === 'back' || idx === null;
   const el = document.createElement(clickable ? 'button' : 'span');

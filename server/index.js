@@ -17,6 +17,7 @@ import {
   declareRiichi,
   declareKan,
   isTenpai,
+  sortTiles,
 } from './game/mahjongGame.js';
 
 const app = express();
@@ -40,6 +41,13 @@ function apiError(res, error, code = 400) {
   return res.status(code).json({ ok: false, error });
 }
 
+function isRoomRonronEnabled(room, io) {
+  return room.players.some((player) => {
+    const sock = io.sockets.sockets.get(player.socketId);
+    return sock?.data.account?.username === 'ronron';
+  });
+}
+
 /** @param {import('socket.io').Socket} socket */
 function leaveIoRooms(socket) {
   for (const room of socket.rooms) {
@@ -51,7 +59,7 @@ function leaveIoRooms(socket) {
 function finalizeMatchWin(io, rm, room, rid, winnerSeat, winType) {
   rm.broadcastState(room, io, rid);
   const wn =
-    room.players.find((p) => p.seat === winnerSeat)?.nickname || `좌석${winnerSeat + 1}`;
+    room.players.find((p) => p.seat === winnerSeat)?.username || room.players.find((p) => p.seat === winnerSeat)?.displayName || `좌석${winnerSeat + 1}`;
   io.to(`room:${rid}`).emit('game:over', {
     winType,
     winnerSeat,
@@ -135,10 +143,9 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.post('/api/register', (req, res) => {
   const username = String(req.body?.username || '');
   const password = String(req.body?.password || '');
-  const nickname = String(req.body?.nickname || username).trim().slice(0, 24);
-  const result = accounts.registerUser(username, password, nickname);
+  const result = accounts.registerUser(username, password, username);
   if (!result.ok) return apiError(res, result.error);
-  return res.json({ ok: true, token: result.token, username: result.user.username, nickname: result.user.nickname });
+  return res.json({ ok: true, token: result.token, username: result.user.username });
 });
 
 app.post('/api/login', (req, res) => {
@@ -146,14 +153,14 @@ app.post('/api/login', (req, res) => {
   const password = String(req.body?.password || '');
   const result = accounts.loginUser(username, password);
   if (!result.ok) return apiError(res, result.error);
-  return res.json({ ok: true, token: result.token, username: result.user.username, nickname: result.user.nickname });
+  return res.json({ ok: true, token: result.token, username: result.user.username });
 });
 
 app.get('/api/me', (req, res) => {
   const token = getTokenFromReq(req);
   const user = token ? accounts.getUserByToken(token) : null;
   if (!user) return apiError(res, '로그인 상태가 아닙니다.', 401);
-  return res.json({ ok: true, username: user.username, nickname: user.nickname });
+  return res.json({ ok: true, username: user.username });
 });
 
 const spritePaths = [
@@ -171,36 +178,19 @@ io.on('connection', (socket) => {
   const authToken = socket.handshake.auth?.token;
   const account = authToken ? accounts.getUserByToken(authToken) : null;
   socket.data.account = account || null;
-  socket.data.nickname = account?.username || `손님${socket.id.slice(0, 4)}`;
+  socket.data.username = account?.username || null;
+  socket.data.displayName = account?.username || `손님${socket.id.slice(0, 4)}`;
   socket.data.roomId = null;
 
   socket.emit('hello', {
     id: socket.id,
-    nickname: socket.data.nickname,
-    username: account?.username || null,
+    username: socket.data.username,
+    displayName: socket.data.displayName,
   });
-
-  socket.on('user:nickname', (payload) => {
-    const n = typeof payload?.nickname === 'string' ? payload.nickname.trim().slice(0, 24) : '';
-    if (!n) return;
-    socket.data.nickname = n;
-    if (socket.data.account) {
-      const updated = accounts.updateNickname(socket.data.account.username, n);
-      if (updated) socket.data.account = { ...socket.data.account, nickname: updated.nickname };
-    }
-    if (socket.data.roomId) {
-      const room = rm.getRoom(socket.data.roomId);
-      if (room) {
-        const player = room.players.find((p) => p.socketId === socket.id);
-        if (player) player.nickname = n;
-        emitRoster(io, room);
-      }
-    }
-    socket.emit('user:me', {
-      id: socket.id,
-      nickname: socket.data.nickname,
-      username: socket.data.account?.username || null,
-    });
+  socket.emit('user:me', {
+    id: socket.id,
+    username: socket.data.username,
+    displayName: socket.data.displayName,
   });
 
   socket.on('room:create', (_payload, ack) => {
@@ -224,7 +214,7 @@ io.on('connection', (socket) => {
       return;
     }
     rm.leaveAllRooms(socket.id);
-    const { ok, error, room } = rm.joinRoom(roomId, socket.id, socket.data.nickname);
+    const { ok, error, room } = rm.joinRoom(roomId, socket.id, socket.data.displayName, socket.data.username);
     if (!ok) {
       if (typeof ack === 'function') ack({ ok: false, error });
       return;
@@ -242,7 +232,7 @@ io.on('connection', (socket) => {
     const rid = socket.data.roomId;
     if (!rid) return;
     const room = rm.getRoom(rid);
-    const leavingName = socket.data.nickname || '플레이어';
+    const leavingName = socket.data.displayName || '플레이어';
     if (room && room.game.phase === 'playing') {
       io.to(`room:${rid}`).emit('room:closed', {
         message: `${leavingName}가 나갔습니다. 게임이 종료됩니다.`,
@@ -295,7 +285,7 @@ io.on('connection', (socket) => {
     const text = typeof payload?.text === 'string' ? payload.text : '';
     const room = rm.getRoom(rid);
     if (!room) return;
-    rm.addChat(rid, socket.data.nickname, text);
+    rm.addChat(rid, socket.data.displayName, text);
     const last = room.chat[room.chat.length - 1];
     io.to(`room:${rid}`).emit('chat:message', last);
   });
@@ -467,15 +457,54 @@ io.on('connection', (socket) => {
     }
     io.to(`room:${rid}`).emit('game:event', { type: 'kan', seat, tile });
     rm.broadcastState(room, io, rid);
-    if (room.game.phase === 'finished' && room.game.winner === null) {
-      finalizeDrawEnd(io, rm, room, rid);
+    if (room.game.phase === 'finished') {
+      if (room.game.winner != null) {
+        finalizeMatchWin(io, rm, room, rid, room.game.winner, room.game.winType);
+      } else {
+        finalizeDrawEnd(io, rm, room, rid);
+      }
     }
+  });
+
+  socket.on('game:cheat-hand', (payload) => {
+    const rid = socket.data.roomId;
+    if (!rid) return;
+    const room = rm.getRoom(rid);
+    if (!room) return;
+    if (!isRoomRonronEnabled(room, io)) {
+      socket.emit('game:error', { message: '치트 권한이 없습니다.' });
+      return;
+    }
+    const seat = rm.findSeat(rid, socket.id);
+    if (seat < 0) {
+      socket.emit('game:error', { message: '방에 입장한 상태가 아닙니다.' });
+      return;
+    }
+    if (room.game.phase !== 'playing') {
+      socket.emit('game:error', { message: '게임 중일 때만 치트 가능합니다.' });
+      return;
+    }
+    const pos = Number(payload?.pos);
+    const tile = typeof payload?.tile === 'string' ? payload.tile.trim() : '';
+    const hand = room.game.hands[seat] || [];
+    if (!Number.isInteger(pos) || pos < 1 || pos > hand.length) {
+      socket.emit('game:error', { message: '올바른 위치를 입력하세요.' });
+      return;
+    }
+    if (!/^([mps][1-9]r?|z[1-7])$/.test(tile)) {
+      socket.emit('game:error', { message: '유효한 패 코드를 입력하세요. 예: m1, p5, s9, z1, m5r' });
+      return;
+    }
+    room.game.hands[seat][pos - 1] = tile;
+    room.game.hands[seat] = sortTiles(room.game.hands[seat]);
+    rm.broadcastState(room, io, rid);
+    io.to(socket.id).emit('game:event', { type: 'cheat-hand', seat, pos, tile });
   });
 
   socket.on('disconnect', () => {
     const rid = socket.data.roomId;
     const room = rid ? rm.getRoom(rid) : null;
-    const leavingName = socket.data.nickname || '플레이어';
+    const leavingName = socket.data.displayName || '플레이어';
     if (room && room.game.phase === 'playing') {
       io.to(`room:${rid}`).emit('room:closed', {
         message: `${leavingName}가 나갔습니다. 게임이 종료됩니다.`,
@@ -500,7 +529,8 @@ function emitRoster(io, room) {
     io.to(p.socketId).emit('room:roster', {
       roomId: room.id,
       players: room.players.map((x, i) => ({
-        nickname: x.nickname,
+        displayName: x.displayName,
+        username: x.username || null,
         seat: x.seat,
         host: i === 0,
         you: x.socketId === p.socketId,

@@ -54,17 +54,18 @@ function formatDelta(value) {
 }
 
 function isTileDora(tile, doraIndicators) {
+  if (isTileAkaDora(tile)) return true;
   if (!doraIndicators || !doraIndicators.length) return false;
+  const normalizedTile = tile.replace('r', '');
   for (const indicator of doraIndicators) {
     const normalDora = nextTile(indicator);
-    if (tile === normalDora) return true;
-    if (tile === `${normalDora}r`) return true;
+    if (normalizedTile === normalDora) return true;
   }
   return false;
 }
 
 function isTileAkaDora(tile) {
-  return tile === 'm5' || tile === 'p5' || tile === 's5' || tile === 'm5r' || tile === 'p5r' || tile === 's5r';
+  return tile === 'm5r' || tile === 'p5r' || tile === 's5r';
 }
 
 function formatRankChange(beforeRank, afterRank) {
@@ -77,6 +78,37 @@ function formatRankChange(beforeRank, afterRank) {
 function closeSummary() {
   const modal = $('summary-modal');
   modal.classList.add('hidden');
+}
+
+function isCheatRoomEnabled() {
+  return roster.players.some((p) => p.username === 'ronron');
+}
+
+function updateCheatButton() {
+  const btn = $('btn-cheat');
+  if (!btn) return;
+  const enabled = isCheatRoomEnabled() && lastState?.phase === 'playing';
+  btn.classList.toggle('hidden', !enabled);
+  btn.disabled = !enabled;
+}
+
+function parseCheatTileInput(input) {
+  const raw = String(input || '').trim();
+  if (!raw.includes('/')) return null;
+  const [posPart, tilePart] = raw.split('/').map((s) => s.trim());
+  const pos = Number(posPart);
+  if (!Number.isInteger(pos) || pos < 1) return null;
+  const tile = tilePart.toLowerCase();
+  if (/^([mps][1-9]r?|z[1-7])$/.test(tile)) return { pos, tile };
+  const names = {
+    일만: 'm1', 이만: 'm2', 삼만: 'm3', 사만: 'm4', 오만: 'm5', 육만: 'm6', 칠만: 'm7', 팔만: 'm8', 구만: 'm9',
+    일통: 'p1', 이통: 'p2', 삼통: 'p3', 사통: 'p4', 오통: 'p5', 육통: 'p6', 칠통: 'p7', 팔통: 'p8', 구통: 'p9',
+    일삭: 's1', 이삭: 's2', 삼삭: 's3', 사삭: 's4', 오삭: 's5', 육삭: 's6', 칠삭: 's7', 팔삭: 's8', 구삭: 's9',
+    동: 'z1', 남: 'z2', 서: 'z3', 북: 'z4', 백: 'z5', 발: 'z6', 중: 'z7',
+    홍5만: 'm5r', 홍5통: 'p5r', 홍5삭: 's5r', '홍5': 'm5r', '홍5통': 'p5r', '홍5삭': 's5r',
+  };
+  if (names[tile]) return { pos, tile: names[tile] };
+  return null;
 }
 
 function renderSummaryPopup(summary) {
@@ -150,7 +182,7 @@ function buildSummaryForState(type, state, options = {}) {
 
   const players = scores.map((score, seat) => {
     const player = roster.players.find((p) => p.seat === seat);
-    const name = player?.nickname || `좌석${seat + 1}`;
+    const name = player?.username || player?.displayName || `좌석${seat + 1}`;
     const delta = score - (prevScores[seat] || 0);
     return {
       name,
@@ -270,12 +302,14 @@ function renderRoster() {
     const d = document.createElement('span');
     d.className = 'seat-pill' + (p.you ? ' me' : '');
     const w = seatWindLabel(p.seat);
-    d.textContent = `${w}가 ${p.nickname}${p.host ? ' · 방장' : ''}`;
+    const name = p.username || p.displayName || `좌석${p.seat + 1}`;
+    d.textContent = `${w}가 ${name}${p.host ? ' · 방장' : ''}`;
     box.appendChild(d);
   });
   const me = roster.players.find((p) => p.you);
   const imHost = Boolean(me?.host);
   $('btn-start').disabled = !(roomId && roster.players.length === 4 && imHost);
+  updateCheatButton();
 }
 
 function renderDiscardStrip(container, seat, state, tileSize) {
@@ -360,6 +394,24 @@ function renderPlayerZone(zoneEl, rel, state, names) {
     zoneEl.appendChild(scoreEl);
   }
 
+  // 대기패 표시 (자신만)
+  if (seat === mySeat && state.waitingTiles && state.waitingTiles.length > 0) {
+    const waitingEl = document.createElement('div');
+    waitingEl.className = 'waiting-tiles';
+    const label = document.createElement('div');
+    label.className = 'waiting-label';
+    label.textContent = '대기패:';
+    waitingEl.appendChild(label);
+    const tilesWrap = document.createElement('div');
+    tilesWrap.className = 'waiting-tiles-wrap';
+    state.waitingTiles.forEach((tile) => {
+      const tileEl = createTileElement(tile, { size: 20 });
+      tilesWrap.appendChild(tileEl);
+    });
+    waitingEl.appendChild(tilesWrap);
+    zoneEl.appendChild(waitingEl);
+  }
+
   // 리치봉 (이치봉)
   const richiStick = document.createElement('div');
   richiStick.className = 'richi-stick';
@@ -375,11 +427,53 @@ function renderPlayerZone(zoneEl, rel, state, names) {
     melds.forEach((m) => {
       const mr = document.createElement('div');
       mr.className = 'meld-row';
-      m.tiles.forEach((t) => {
-        const isDora = isTileDora(t, state.doraIndicators);
-        const className = isDora ? 'tile-dora' : '';
-        mr.appendChild(createTileElement(t, { size: 22, className }));
-      });
+      if (m.type === 'kan') {
+        mr.classList.add('meld-kan');
+        if (m.subType) {
+          mr.classList.add(`meld-kan-${m.subType}`);
+        }
+        if (m.subType === 'daiminkan' && typeof m.sourceSeat === 'number') {
+          const relative = (m.sourceSeat - seat + 4) % 4;
+          if (relative === 3) mr.classList.add('source-left');
+          else if (relative === 2) mr.classList.add('source-center');
+          else if (relative === 1) mr.classList.add('source-right');
+        }
+      }
+
+      if (m.type === 'kan' && m.subType === 'kakan') {
+        mr.classList.add('meld-kan-kakan');
+        const baseRow = document.createElement('div');
+        baseRow.className = 'kakan-base';
+        for (let tileIndex = 0; tileIndex < 3; tileIndex += 1) {
+          const t = m.tiles[tileIndex];
+          const isDora = isTileDora(t, state.doraIndicators);
+          const className = isDora ? 'tile-dora' : '';
+          baseRow.appendChild(createTileElement(t, { size: 22, className }));
+        }
+        mr.appendChild(baseRow);
+        const topTile = m.tiles[3];
+        const isDora = isTileDora(topTile, state.doraIndicators);
+        const className = isDora ? 'tile-dora tile-kakan-top tile-horizontal' : 'tile-kakan-top tile-horizontal';
+        mr.appendChild(createTileElement(topTile, { size: 22, className }));
+      } else {
+        let daiminkanHorizontalIndex = null;
+        if (m.type === 'kan' && m.subType === 'daiminkan' && typeof m.sourceSeat === 'number') {
+          const relative = (m.sourceSeat - seat + 4) % 4;
+          if (relative === 3) daiminkanHorizontalIndex = 0;
+          else if (relative === 2) daiminkanHorizontalIndex = 1;
+          else if (relative === 1) daiminkanHorizontalIndex = 3;
+        }
+
+        m.tiles.forEach((t, tileIndex) => {
+          const isDora = isTileDora(t, state.doraIndicators);
+          const tileClasses = [];
+          if (isDora) tileClasses.push('tile-dora');
+          if (tileIndex === daiminkanHorizontalIndex) tileClasses.push('tile-horizontal');
+          const className = tileClasses.join(' ');
+          mr.appendChild(createTileElement(t, { size: 22, className }));
+        });
+      }
+
       mw.appendChild(mr);
     });
     zoneEl.appendChild(mw);
@@ -401,7 +495,7 @@ function renderGame(state) {
   panel.classList.remove('hidden');
   appEl.classList.add('table-focus');
 
-  const names = roster.players.map((p) => p.nickname);
+  const names = roster.players.map((p) => p.username || p.displayName || `좌석${p.seat + 1}`);
   $('wall-count-disp').textContent = String(state.wallLeft ?? '—');
 
   // 장풍 표시
@@ -491,6 +585,7 @@ function renderGame(state) {
       $(id).innerHTML = '';
     });
   }
+  updateCheatButton();
 
   const handEl = $('hand');
   handEl.innerHTML = '';
@@ -588,20 +683,18 @@ socket.on('connect', () => {
 });
 
 socket.on('hello', () => {
-  const saved = localStorage.getItem(nickKey);
-  const hasToken = Boolean(localStorage.getItem(tokenKey));
-  if (!hasToken && saved) socket.emit('user:nickname', { nickname: saved });
+  // 서버에서 로그인 토큰이 유효한 경우 user:me 이벤트가 곧 도착합니다.
 });
 
 socket.on('user:me', (p) => {
-  $('me-line').dataset.nick = p.nickname;
-  $('me-line').textContent = `나: ${p.nickname}`;
-  $('nick').value = p.nickname;
+  const meLine = $('me-line');
+  if (meLine) {
+    meLine.textContent = `나: ${p.username || '손님'}`;
+  }
   if (p.username) {
-    setAuthState({ username: p.username, nickname: p.nickname });
+    setAuthState({ username: p.username });
   } else {
     setAuthState(null);
-    localStorage.setItem(nickKey, p.nickname);
   }
   renderRoster();
 });
@@ -618,7 +711,7 @@ async function authAction(endpoint) {
     const resp = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password, nickname: $('nick').value.trim() || username }),
+      body: JSON.stringify({ username, password }),
     });
     const data = await resp.json();
     if (!resp.ok || !data?.ok) {
@@ -699,7 +792,7 @@ socket.on('game:over', (p) => {
   const summary = buildSummaryForState('win', lastState, {
     winnerSeat: winner,
     winnerName: p?.winnerNickname || `좌석${winner + 1}`,
-    winText: p?.winType === 'ron' ? '론' : p?.winType === 'tsumo' ? '쯔모' : '승리',
+    winText: p?.winType === 'ron' ? '론' : p?.winType === 'tsumo' ? '쯔모' : p?.winType === 'tsukanzu' ? '쓰깡즈' : '승리',
     winWind: seatWindLabel(winner),
     yakuText,
     han: p.han || 0,
@@ -710,7 +803,7 @@ socket.on('game:over', (p) => {
   });
   renderSummaryPopup(summary);
 
-  const label = p?.winType === 'ron' ? '론' : p?.winType === 'tsumo' ? '쯔모' : '승리';
+  const label = p?.winType === 'ron' ? '론' : p?.winType === 'tsumo' ? '쯔모' : p?.winType === 'tsukanzu' ? '쓰깡즈' : '승리';
   toast(`${p?.winnerNickname || '승자'} ${label}!`);
 });
 
@@ -836,6 +929,17 @@ $('btn-pass-ron').addEventListener('click', () => socket.emit('game:passRon'));
 $('btn-riichi').addEventListener('click', () => socket.emit('game:riichi'));
 
 $('btn-kan').addEventListener('click', () => socket.emit('game:kan'));
+
+$('btn-cheat').addEventListener('click', () => {
+  const input = prompt('치트 입력 - 위치/패코드 예: 1/m5 또는 2/p2');
+  if (!input) return;
+  const command = parseCheatTileInput(input);
+  if (!command) {
+    toast('올바른 입력 형식이 아닙니다. 예: 1/m5');
+    return;
+  }
+  socket.emit('game:cheat-hand', { pos: command.pos, tile: command.tile });
+});
 
 $('btn-pon').addEventListener('click', () => socket.emit('game:pon'));
 

@@ -1,4 +1,4 @@
-import { parseTile, tileKey } from './tiles.js';
+import { normalizeTile, parseTile, tileKey } from './tiles.js';
 
 /** @param {string[]} hand
  * @param {string} discard
@@ -7,7 +7,7 @@ import { parseTile, tileKey } from './tiles.js';
 export function chiTilePairs(hand, discard) {
   const { suit, n } = parseTile(discard);
   if (suit === 'z') return [];
-  const has = (t) => hand.filter((x) => x === t).length;
+  const has = (t) => hand.filter((x) => normalizeTile(x) === normalizeTile(t)).length;
   const opts = [];
 
   if (n >= 3) {
@@ -36,5 +36,5 @@ export function chiTilePairs(hand, discard) {
 
 /** @param {string[]} hand @param {string} t */
 export function canPon(hand, t) {
-  return hand.filter((x) => x === t).length >= 2;
+  return hand.filter((x) => normalizeTile(x) === normalizeTile(t)).length >= 2;
 }

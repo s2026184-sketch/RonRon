@@ -1,4 +1,4 @@
-import { parseTile, tileKey } from './tiles.js';
+import { normalizeTile, parseTile, tileKey } from './tiles.js';
 
 /**
  * 멘탄: (n-2)가 3의 배수일 때, n장에서 대기 1쌍 + 나머지 멘쯔.
@@ -8,7 +8,10 @@ export function isWinningHandGeneral(tiles) {
   const n = tiles.length;
   if (n < 2 || (n - 2) % 3 !== 0) return false;
   const counts = {};
-  for (const t of tiles) counts[t] = (counts[t] || 0) + 1;
+  for (const t of tiles) {
+    const normalized = normalizeTile(t);
+    counts[normalized] = (counts[normalized] || 0) + 1;
+  }
   const keys = Object.keys(counts).sort(compareTiles);
   for (const pairTile of keys) {
     if (counts[pairTile] < 2) continue;
